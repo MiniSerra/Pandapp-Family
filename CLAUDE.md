@@ -13,9 +13,10 @@ i objectius col·lectius.
 - **Parla i escriu comentaris en català.** Tota la interfície va en català.
 - **Una funcionalitat per sessió.** No implementis diverses coses alhora.
 - **Commits petits i freqüents** després de cada peça que funcioni.
-- **Mai posis claus secretes al client.** La clau `anon` de Supabase sí que pot anar
-  al frontend (és pública per disseny). La `service_role` i la clau de Gemini només
-  poden viure dins d'edge functions.
+- **Mai posis claus secretes al client.** La clau publishable de Supabase
+  (`sb_publishable_...`) sí que pot anar al frontend (és pública per disseny).
+  La clau secreta (`sb_secret_...`) i la clau de Gemini només poden viure dins
+  d'edge functions.
 - **Les polítiques de RLS s'han de verificar sempre** amb una prova real: entrar amb
   un usuari i intentar llegir dades d'un altre ha de tornar buit.
 - Si una decisió de disseny no és a aquest fitxer, **pregunta abans d'inventar-la**.
@@ -182,6 +183,9 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   d'aquella activitat i es bloqueja si no han passat `cooldown_h`. És per
   activitat, no per usuari (si algú neteja el sorral, queda bloquejat per a
   tothom). Sense això el rànquing queda inservible des del primer dia.
+- **Anul·lació:** es pot desfer una reclamació pròpia amb `anullar_completion`
+  dins dels primers 15 minuts. Retorna `foto_url`/`thumb_url` perquè el client
+  esborri els fitxers del bucket.
 
 ---
 
@@ -205,7 +209,7 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   fitxers orfes acumulant-se fins a omplir la quota.
 - **L'històric de tasques no s'esborra mai.** Punts, dates, qui i validació es
   conserven per sempre. Només desapareix la imatge.
-- Al feed, les entrades sense foto mostren la icona de l'activitat.
+- Al feed, les entrades sense foto mostren la icona (o l'emoji) de l'activitat.
 - **Ordre pujada foto / reclamació:** la foto es puja al bucket abans de cridar
   `reclamar_activitat` (cal la URL per passar-la a la funció). Si la crida falla
   (p. ex. cooldown actiu), el frontend **ha d'esborrar** el fitxer que acaba de
@@ -268,8 +272,9 @@ activitats          id, familia_id, categoria, nom, emoji, descripcio,
                     compartible, requereix_foto, es_personal, es_torn,
                     estat (proposta|activa|retirada), versio, proposada_per,
                     activa_des_de
-completions         id, activitat_id, versio_punts, pot_total, foto_url,
-                    thumb_url, validada_per, estat (pendent|validada), created_at
+completions         id, activitat_id, familia_id, creada_per, versio_punts,
+                    punts_base_snapshot, pot_total, foto_url, thumb_url,
+                    validada_per, estat (pendent|validada), created_at
 participacions      completion_id, usuari_id, punts_assignats, confirmat,
                     es_qui_puja
 likes               completion_id, usuari_id
@@ -285,9 +290,13 @@ resums              id, familia_id, usuari_id (null = familiar), periode, text
 **Important:** els punts van a `participacions`, no a `completions`. Si es fa al
 revés, cada consulta del rànquing ha de dividir i apareixen errors d'arrodoniment.
 
-**Important:** `versio_punts` a `completions` congela els punts que valia l'activitat
-quan es va fer. Si es canvien els punts a mitja temporada, l'històric no s'ha de
-recalcular sol.
+**Important:** `punts_base_snapshot` (i `versio_punts`) a `completions` congelen
+els punts que valia l'activitat quan es va fer. Si es canvien els punts a mitja
+temporada, l'històric no s'ha de recalcular sol.
+
+**Important:** `familia_id` i `creada_per` estan denormalitzats a `completions`
+perquè les polítiques de RLS i les consultes de feed/rànquing no calgui que facin
+`JOIN` a `activitats` per saber de qui o de quina família és cada fila.
 
 ---
 
@@ -296,8 +305,77 @@ recalcular sol.
 `casa` · `cuina` · `bany` · `roba` · `panda` · `compres` · `manteniment` ·
 `personals` · `familiars`
 
-Arrencar amb 25-30 activitats, no amb 65. Una llista massa llarga paralitza: s'obre
-l'app, no se sap què triar, i es tanca.
+El catàleg complet (66 activitats) ja està carregat via `supabase/seed.sql`. La
+llista llarga es gestiona a la **interfície**, agrupant per categories i ordenant
+per urgència — no es retalla el catàleg.
+
+---
+
+## Disseny
+
+### Principis
+
+- **És un marcador, no una revista.** La informació principal són números i un
+  emoji. Xifres grosses i tabulars; tota la resta, discreta.
+- **S'obre 20 segons, cinc cops al dia, dret a la cuina.** Llegible de reüll i
+  amb una mà. Res de text gris clar ni tipografies fines.
+- **La llista és l'app.** En obrir-la, la llista d'activitats ordenada per
+  urgència amb el progrés del dia a dalt. Rànquings i perfil en pestanyes
+  inferiors. Res de pantalla d'inici amb resum ni de graella de targetes.
+
+### El color codifica urgència
+
+Aquesta és la regla més important de la interfície. L'escalada per oblit és
+invisible si tot es veu igual, així que **la pastilla de punts s'escalfa**:
+
+| Estat de la tasca | Color de la pastilla |
+|---|---|
+| Al dia (dins del període normal) | neutre |
+| Escalada iniciada | `--tebi` |
+| Escalada prop del sostre | `--calent` |
+
+Ambre i vermell **només** per a això. Si es fan servir per a res més, la senyal
+es dilueix i es perd l'efecte.
+
+### Tokens
+
+```
+--tinta      #15211B   text; gairebé negre amb un pèl de verd
+--paper      #F1F3EF   fons
+--targeta    #FFFFFF
+--panda      #2E7D5B   verd Panda: fet, progrés, botó principal
+--tebi       #C97A16   escalada mitjana
+--calent     #B23A2F   escalada alta
+--vora       #DDE1DA
+```
+
+El verd surt dels ulls del Panda i es reserva per a coses acabades i per a
+l'acció principal.
+
+### Tipografia
+
+- **Bricolage Grotesque** — números grossos i títols.
+- **Karla** — text corrent.
+- **DM Mono** — punts i comptadors. Xifres tabulars perquè les columnes del
+  rànquing quedin alineades.
+
+Totes de Google Fonts. Definides com a variables CSS a `index.css`.
+
+### Llista d'activitats
+
+- Emoji a ~40px a l'esquerra, fa d'ancoratge visual.
+- Nom de l'activitat, i a sota en petit el temps des de l'última vegada
+  ("fa 3 dies", "al dia").
+- Pastilla de punts a la dreta, amb el color d'urgència.
+- **Les tasques fetes no desapareixen**: es queden en gris amb qui l'ha fet i
+  quan es podrà tornar a reclamar. Així se sap que està feta i no es busca.
+
+### Escriptura
+
+- Sempre en català, tractament informal.
+- Botons amb verb: "Ho he fet", no "Enviar".
+- Els errors diuen què ha passat i què fer, sense demanar perdó.
+- Les pantalles buides conviden a actuar, no s'excusen.
 
 ---
 
