@@ -1,26 +1,28 @@
 import { disponibleEn } from '../lib/temps'
 
-const COLOR_PASTILLA = {
-  neutre: 'bg-vora text-tinta',
-  tebi: 'bg-tebi text-white',
-  calent: 'bg-calent text-white',
+const ESTIL_PASTILLA = {
+  neutre: 'border-vora bg-vora text-tinta',
+  tebi: 'border-tebi-vora bg-tebi-fons text-tebi',
+  calent: 'border-calent-vora bg-calent-fons text-calent',
 }
 
 export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }) {
   const { bloquejada, fetPer, faTempsText, calorPunts, remainingMs } = estat
 
   const classesFons = flaix
-    ? 'bg-panda text-white'
+    ? 'bg-panda text-paper'
     : bloquejada
-      ? 'bg-targeta opacity-50'
-      : 'bg-targeta hover:bg-vora/40'
+      ? 'opacity-50'
+      : 'hover:bg-vora/40'
 
   const contingut = (
     <>
       <span className="text-[2.25rem] leading-none">{activitat.emoji}</span>
       <div className="min-w-0 flex-1 text-left">
-        <p className="truncate font-body font-medium text-tinta">{activitat.nom}</p>
-        <p className="truncate text-xs text-tinta/60">
+        <p className="truncate font-display font-medium text-tinta">
+          {activitat.nom}
+        </p>
+        <p className="truncate font-body text-xs text-tinta-sec">
           {bloquejada
             ? `l'ha fet ${fetPer} · disponible ${disponibleEn(remainingMs)}`
             : faTempsText}
@@ -32,7 +34,7 @@ export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }
         </span>
       ) : (
         <span
-          className={`shrink-0 rounded-full px-3 py-1 font-mono text-sm ${COLOR_PASTILLA[calorPunts]}`}
+          className={`bisell shrink-0 rounded-full border px-3 py-1 font-display text-sm font-bold ${ESTIL_PASTILLA[calorPunts]}`}
         >
           {activitat.punts_base}
         </span>
@@ -42,9 +44,7 @@ export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }
 
   if (bloquejada) {
     return (
-      <div
-        className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${classesFons}`}
-      >
+      <div className={`flex items-center gap-3 px-3 py-2 transition-colors ${classesFons}`}>
         {contingut}
       </div>
     )
@@ -54,7 +54,7 @@ export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }
     <button
       type="button"
       onClick={onSeleccionar}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${classesFons}`}
+      className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${classesFons}`}
     >
       {contingut}
     </button>

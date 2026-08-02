@@ -35,16 +35,16 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end bg-tinta/40"
+      className="fixed inset-0 z-50 flex items-end bg-paper/70"
       onClick={onTancar}
     >
       <div
-        className="w-full rounded-t-2xl bg-targeta p-6 pb-8"
+        className="bisell w-full rounded-t-2xl border border-vora bg-targeta p-6 pb-8"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-center gap-3">
           <span className="text-4xl">{activitat.emoji}</span>
-          <h2 className="font-display text-xl font-semibold text-tinta">
+          <h2 className="font-display text-xl font-medium text-tinta">
             {activitat.nom}
           </h2>
         </div>
@@ -53,7 +53,7 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
           <div className="mb-4">
             <label
               htmlFor="foto"
-              className="mb-1 block text-sm font-medium text-tinta"
+              className="mb-1 block text-sm font-medium text-tinta-sec"
             >
               Foto
             </label>
@@ -78,7 +78,7 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
           type="button"
           onClick={handleReclamar}
           disabled={enviant || !potReclamar}
-          className="w-full rounded-md bg-panda px-4 py-3 text-base font-medium text-white disabled:opacity-50"
+          className="w-full rounded-md bg-panda px-4 py-3 text-base font-medium text-paper disabled:opacity-50"
         >
           {enviant ? 'Enviant…' : 'Ho he fet'}
         </button>

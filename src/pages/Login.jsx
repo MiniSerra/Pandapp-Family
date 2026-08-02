@@ -38,20 +38,20 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-8 text-center text-3xl font-bold text-gray-900">
+        <h1 className="mb-8 text-center font-display text-3xl font-medium text-tinta">
           Pandapp
         </h1>
         <form
           onSubmit={handleSubmit}
-          className="space-y-4 rounded-lg bg-white p-6 shadow-sm"
+          className="space-y-4 rounded-2xl border border-vora bg-targeta p-6 bisell"
           noValidate
         >
           <div>
             <label
               htmlFor="email"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-tinta-sec"
             >
               Email
             </label>
@@ -61,13 +61,13 @@ export default function Login() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-base text-gray-900 focus:border-gray-900 focus:outline-none"
+              className="w-full rounded-md border border-vora bg-paper px-3 py-2 text-base text-tinta focus:border-tinta-sec focus:outline-none"
             />
           </div>
           <div>
             <label
               htmlFor="password"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-tinta-sec"
             >
               Contrasenya
             </label>
@@ -77,14 +77,14 @@ export default function Login() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-base text-gray-900 focus:border-gray-900 focus:outline-none"
+              className="w-full rounded-md border border-vora bg-paper px-3 py-2 text-base text-tinta focus:border-tinta-sec focus:outline-none"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-calent">{error}</p>}
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="w-full rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper disabled:opacity-50"
           >
             {submitting ? 'Entrant…' : 'Entra'}
           </button>

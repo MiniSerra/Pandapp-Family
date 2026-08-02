@@ -8,7 +8,7 @@ function App() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-paper">
-        <p className="text-tinta/60">Carregant…</p>
+        <p className="text-tinta-sec">Carregant…</p>
       </div>
     )
   }
@@ -20,13 +20,13 @@ function App() {
   return (
     <div className="flex min-h-screen flex-col bg-paper">
       <header className="flex items-center justify-between border-b border-vora bg-targeta px-4 py-3">
-        <p className="font-display font-semibold text-tinta">
+        <p className="font-display font-medium text-tinta">
           {profile ? profile.nom : 'Pandapp'}
         </p>
         <button
           type="button"
           onClick={signOut}
-          className="rounded-md px-2 py-1 text-sm text-tinta/60 hover:bg-vora"
+          className="rounded-md px-2 py-1 text-sm text-tinta-sec hover:bg-vora"
         >
           Surt
         </button>

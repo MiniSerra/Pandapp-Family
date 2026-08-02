@@ -316,12 +316,17 @@ per urgència — no es retalla el catàleg.
 ### Principis
 
 - **És un marcador, no una revista.** La informació principal són números i un
-  emoji. Xifres grosses i tabulars; tota la resta, discreta.
+  emoji. Xifres grosses; tota la resta, discreta.
 - **S'obre 20 segons, cinc cops al dia, dret a la cuina.** Llegible de reüll i
   amb una mà. Res de text gris clar ni tipografies fines.
 - **La llista és l'app.** En obrir-la, la llista d'activitats ordenada per
   urgència amb el progrés del dia a dalt. Rànquings i perfil en pestanyes
   inferiors. Res de pantalla d'inici amb resum ni de graella de targetes.
+- **Negre pur (OLED), mode fosc per defecte** segons preferència del sistema
+  (`prefers-color-scheme`). No hi ha selector manual clar/fosc a la fase 1.
+- **Minimalista amb un únic detall d'acabat**: el bisell metàl·lic de les
+  targetes (veure sota). No s'afegeixen més ornaments — el risc de disseny
+  es concentra aquí i enlloc més.
 
 ### El color codifica urgència
 
@@ -335,40 +340,74 @@ invisible si tot es veu igual, així que **la pastilla de punts s'escalfa**:
 | Escalada prop del sostre | `--calent` |
 
 Ambre i vermell **només** per a això. Si es fan servir per a res més, la senyal
-es dilueix i es perd l'efecte.
+es dilueix i es perd l'efecte. Sobre negre pur, `--tebi` i `--calent` són el
+color clar com a text sobre un fons fosc del mateix to (no el color saturat
+ple, que sobre negre cansa la vista).
 
 ### Tokens
 
 ```
---tinta      #15211B   text; gairebé negre amb un pèl de verd
---paper      #F1F3EF   fons
---targeta    #FFFFFF
---panda      #2E7D5B   verd Panda: fet, progrés, botó principal
---tebi       #C97A16   escalada mitjana
---calent     #B23A2F   escalada alta
---vora       #DDE1DA
+--paper       #000000   negre pur, fons general
+--targeta     #0A0A0A   fons de les targetes, gairebé negre
+--vora        #1C1C1C   contorn de targeta
+--tinta       #FAFAFA   text principal
+--tinta-sec   #5C5C5C   text secundari
+--panda       #4ADE94   verd Panda: progrés, fet, acció principal
+--tebi        text #E3C282 · fons #231C0E · vora #362b13
+--calent      text #E8A688 · fons #241410 · vora #362019
 ```
 
 El verd surt dels ulls del Panda i es reserva per a coses acabades i per a
 l'acció principal.
 
+### El bisell metàl·lic (signatura visual de l'app)
+
+Totes les targetes (grups d'activitats, pastilles de punts, fulls inferiors)
+porten aquest acabat: una vora gairebé invisible més una línia de llum interior
+de dalt, que simula que la targeta té cantell i li toca la llum:
+
+```css
+border: 1px solid var(--vora);
+box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+```
+
+És l'únic detall decoratiu de tota la interfície — per això funciona. No
+s'apliquen gradients de color, glow, ni cap altre efecte enlloc més. Aplica'l
+també, amb la mateixa opacitat, a les pastilles de punts (vora del mateix to
+que el seu fons, un punt més clara).
+
 ### Tipografia
 
-- **Bricolage Grotesque** — números grossos i títols.
-- **Karla** — text corrent.
-- **DM Mono** — punts i comptadors. Xifres tabulars perquè les columnes del
-  rànquing quedin alineades.
+**Dues famílies, no tres.** Un sistema de "display + body + mono" és el
+default genèric que fa servir qualsevol IA sense pensar-hi — es va descartar
+explícitament perquè "delatava fet per IA".
 
-Totes de Google Fonts. Definides com a variables CSS a `index.css`.
+- **Bricolage Grotesque** (pesos 500 i 700) — títols, noms d'activitat, I
+  **tots els números** (punts, progrés del dia, rànquings). Els números porten
+  el pes 700 per donar-los personalitat pròpia; res de font monospace.
+- **Karla** (pesos 400 i 500) — text de suport: temps transcorregut,
+  subtítols, botons.
+
+Cap monospace enlloc de la interfície. Totes dues de Google Fonts, definides
+com a variables CSS a `index.css`.
 
 ### Llista d'activitats
 
-- Emoji a ~40px a l'esquerra, fa d'ancoratge visual.
-- Nom de l'activitat, i a sota en petit el temps des de l'última vegada
-  ("fa 3 dies", "al dia").
-- Pastilla de punts a la dreta, amb el color d'urgència.
-- **Les tasques fetes no desapareixen**: es queden en gris amb qui l'ha fet i
-  quan es podrà tornar a reclamar. Així se sap que està feta i no es busca.
+- Emoji a ~28-40px a l'esquerra, fa d'ancoratge visual.
+- Nom de l'activitat en Bricolage Grotesque 500, i a sota en Karla 12px i
+  `--tinta-sec` el temps des de l'última vegada ("fa 3 dies", "al dia").
+- Pastilla de punts a la dreta, en Bricolage Grotesque 700, amb el color
+  d'urgència i el bisell metàl·lic.
+- Les activitats s'agrupen en targetes per categoria (una targeta amb bisell
+  per categoria, files a dins separades per una línia fina `--vora`), amb el
+  nom de la categoria en Bricolage Grotesque 500, majúscules, `--tinta-sec`,
+  a sobre de cada targeta.
+- **Les tasques fetes no desapareixen**: es queden amb opacitat reduïda, amb
+  qui l'ha fet i quan es podrà tornar a reclamar, i la pastilla substituïda
+  per una icona de check en `--panda`. Així se sap que està feta i no es
+  busca.
+- El progrés del dia, a la capçalera, en un anell circular (no una barra
+  plana) amb els punts al mig en Bricolage Grotesque 700 gros.
 
 ### Escriptura
 

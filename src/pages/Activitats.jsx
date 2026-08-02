@@ -71,6 +71,46 @@ function calculaEstat(activitat, ultima, perfils) {
   }
 }
 
+function AnellProgres({ punts, llindar }) {
+  const mida = 112
+  const gruix = 10
+  const radi = (mida - gruix) / 2
+  const circumferencia = 2 * Math.PI * radi
+  const percent = llindar > 0 ? Math.min(1, punts / llindar) : 0
+  const offset = circumferencia * (1 - percent)
+
+  return (
+    <div className="relative" style={{ width: mida, height: mida }}>
+      <svg width={mida} height={mida} className="-rotate-90">
+        <circle
+          cx={mida / 2}
+          cy={mida / 2}
+          r={radi}
+          fill="none"
+          stroke="var(--color-vora)"
+          strokeWidth={gruix}
+        />
+        <circle
+          cx={mida / 2}
+          cy={mida / 2}
+          r={radi}
+          fill="none"
+          stroke="var(--color-panda)"
+          strokeWidth={gruix}
+          strokeLinecap="round"
+          strokeDasharray={circumferencia}
+          strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-500 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-display text-3xl font-bold text-tinta">{punts}</span>
+        <span className="font-body text-xs text-tinta-sec">/ {llindar}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function Activitats() {
   const { profile } = useAuth()
   const [activitats, setActivitats] = useState([])
@@ -167,7 +207,7 @@ export default function Activitats() {
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
-        <p className="text-tinta/60">Carregant activitats…</p>
+        <p className="text-tinta-sec">Carregant activitats…</p>
       </div>
     )
   }
@@ -179,7 +219,7 @@ export default function Activitats() {
         <button
           type="button"
           onClick={carregar}
-          className="rounded-md bg-tinta px-4 py-2 text-sm font-medium text-white"
+          className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
         >
           Torna-ho a provar
         </button>
@@ -188,23 +228,11 @@ export default function Activitats() {
   }
 
   const llindar = profile?.llindar_diari ?? 100
-  const percent = Math.min(100, Math.round((puntsAvui / llindar) * 100))
 
   return (
     <div className="pb-8">
-      <div className="border-b border-vora bg-targeta px-4 py-4">
-        <div className="mb-2 flex items-baseline justify-between">
-          <p className="font-display text-sm font-semibold text-tinta">Avui</p>
-          <p className="font-mono text-sm text-tinta">
-            {puntsAvui} / {llindar}
-          </p>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-vora">
-          <div
-            className="h-full rounded-full bg-panda transition-all"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+      <div className="flex items-center justify-center border-b border-vora bg-targeta px-4 py-6">
+        <AnellProgres punts={puntsAvui} llindar={llindar} />
       </div>
 
       {ORDRE_CATEGORIES.map((cat) => {
@@ -213,10 +241,10 @@ export default function Activitats() {
 
         return (
           <section key={cat} className="px-4 py-3">
-            <h2 className="mb-2 font-display text-xs font-semibold uppercase tracking-wide text-tinta/50">
+            <h2 className="mb-2 font-display text-xs font-medium uppercase tracking-wide text-tinta-sec">
               {NOM_CATEGORIES[cat]}
             </h2>
-            <div className="space-y-1">
+            <div className="bisell divide-y divide-vora overflow-hidden rounded-2xl border border-vora bg-targeta">
               {llista.map((act) => (
                 <FilaActivitat
                   key={act.id}
