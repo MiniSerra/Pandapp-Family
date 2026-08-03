@@ -15,8 +15,10 @@
 --   - El cooldown per activitat SÍ entra en fase 1, però NO es comprova
 --     al client: es fa sempre dins de la funció `reclamar_activitat`,
 --     en la mateixa transacció que crea la completion.
---   - L'escalada per oblit (k_dia, sostre) es queda per a fase 2, però
---     les columnes ja es creen des d'ara.
+--   - L'escalada per oblit (k_dia, sostre) es calcula dins de
+--     `reclamar_activitat` (fase 2): mai al client, i el resultat ja
+--     arrodonit es guarda a `punts_base_snapshot`, que per tant deixa de
+--     ser `activitats.punts_base` pla.
 --   - Els punts es guarden a `participacions`, mai al pot de `completions`.
 --   - El client MAI insereix directament a `completions`/`participacions`:
 --     només pot cridar `reclamar_activitat` (i, per anul·lar, `anullar_completion`).
@@ -146,12 +148,14 @@ create table public.completions (
   -- congela activitats.versio en el moment de completar-se, perquè un
   -- canvi de punts a mitja temporada no alteri l'històric.
   versio_punts          integer not null check (versio_punts > 0),
-  -- congela activitats.punts_base en el moment de completar-se (el valor
-  -- real de punts, no només el número de versió).
+  -- punts reals atorgats en el moment de completar-se, amb l'escalada per
+  -- oblit ja aplicada (fase 2): NO és activitats.punts_base pla, és
+  -- punts_base × multiplicador d'escalada, ja arrodonit. Es calcula dins
+  -- de reclamar_activitat i mai es recalcula després.
   punts_base_snapshot   integer not null check (punts_base_snapshot > 0),
   -- total de punts del pot abans de repartir-se entre participants
   -- (ja inclourà el multiplicador de grup quan les tasques compartides
-  -- arribin a la fase 3; en fase 1 sempre és igual a punts_base_snapshot).
+  -- arribin a la fase 3; de moment sempre és igual a punts_base_snapshot).
   pot_total             integer not null check (pot_total >= 0),
   foto_url              text,
   thumb_url             text,
@@ -308,10 +312,10 @@ create trigger on_auth_user_created
 -- FUNCIÓ: reclamar_activitat
 -- =====================================================================
 -- Únic punt d'entrada per crear una completion. Tota la lògica de
--- negoci (cooldown, límit personal diari, foto obligatòria, lectura de
--- punts_base) viu aquí, mai al client, perquè és l'únic lloc on es pot
--- garantir atomicitat (bloqueig de fila) i que ningú se salti les regles
--- cridant directament la taula.
+-- negoci (cooldown, límit personal diari, foto obligatòria, càlcul de
+-- l'escalada per oblit) viu aquí, mai al client, perquè és l'únic lloc
+-- on es pot garantir atomicitat (bloqueig de fila) i que ningú se salti
+-- les regles cridant directament la taula.
 create or replace function public.reclamar_activitat(
   p_activitat_id uuid,
   p_foto_url text default null,
@@ -328,6 +332,10 @@ declare
   v_activitat            public.activitats%rowtype;
   v_ultima_completion    timestamptz;
   v_punts_personals_avui integer;
+  v_hores_des_ultima     numeric;
+  v_dies_passats_periode numeric;
+  v_multiplicador        numeric;
+  v_punts_calculats      integer;
   v_completion           public.completions%rowtype;
 begin
   if v_usuari_id is null then
@@ -370,6 +378,21 @@ begin
     raise exception 'Aquesta activitat encara està en temps de refredament. Torna-ho a provar més tard.';
   end if;
 
+  -- Escalada per oblit (veure CLAUDE.md "Sistema de punts"): passat
+  -- periode_normal_h des de l'última completació, els punts pugen de
+  -- manera contínua per dia, limitats per sostre. Si encara no ha passat
+  -- periode_normal_h, o l'activitat no s'havia fet mai, són punts_base
+  -- plans. Arrodoniment normal (no cap amunt: això és per al repartiment
+  -- de tasques compartides, fase 3).
+  if v_ultima_completion is null then
+    v_punts_calculats := v_activitat.punts_base;
+  else
+    v_hores_des_ultima := extract(epoch from (now() - v_ultima_completion)) / 3600.0;
+    v_dies_passats_periode := greatest(0, (v_hores_des_ultima - v_activitat.periode_normal_h) / 24.0);
+    v_multiplicador := least(v_activitat.sostre, 1 + v_activitat.k_dia * v_dies_passats_periode);
+    v_punts_calculats := round(v_activitat.punts_base * v_multiplicador)::integer;
+  end if;
+
   if v_activitat.requereix_foto and p_foto_url is null then
     raise exception 'Aquesta activitat requereix una foto per poder reclamar-la.';
   end if;
@@ -383,7 +406,7 @@ begin
       and a.es_personal
       and c.created_at >= public.inici_periode_local('day');
 
-    if v_punts_personals_avui + v_activitat.punts_base > 60 then
+    if v_punts_personals_avui + v_punts_calculats > 60 then
       raise exception 'Has arribat al límit de 60 punts personals per avui.';
     end if;
   end if;
@@ -394,7 +417,7 @@ begin
     foto_url, thumb_url
   ) values (
     v_activitat.id, v_familia_id, v_usuari_id,
-    v_activitat.versio, v_activitat.punts_base, v_activitat.punts_base,
+    v_activitat.versio, v_punts_calculats, v_punts_calculats,
     p_foto_url, p_thumb_url
   )
   returning * into v_completion;
@@ -402,7 +425,7 @@ begin
   insert into public.participacions (
     completion_id, usuari_id, punts_assignats, confirmat, es_qui_puja
   ) values (
-    v_completion.id, v_usuari_id, v_activitat.punts_base, true, true
+    v_completion.id, v_usuari_id, v_punts_calculats, true, true
   );
 
   return v_completion;
@@ -410,7 +433,7 @@ end;
 $$;
 
 comment on function public.reclamar_activitat(uuid, text, text) is
-  'Únic punt d''entrada per reclamar una activitat: comprova cooldown, foto obligatòria i límit personal diari, i crea completion + participació en una sola transacció.';
+  'Únic punt d''entrada per reclamar una activitat: comprova cooldown i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, i crea completion + participació en una sola transacció.';
 
 revoke all on function public.reclamar_activitat(uuid, text, text) from public;
 grant execute on function public.reclamar_activitat(uuid, text, text) to authenticated;
