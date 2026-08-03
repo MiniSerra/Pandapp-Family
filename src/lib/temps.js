@@ -56,3 +56,28 @@ export function disponibleEn(ms) {
   const dies = Math.ceil(hores / 24)
   return `d'aquí a ${dies} ${dies === 1 ? 'dia' : 'dies'}`
 }
+
+// Text relatiu de gra fi ("fa 5 min", "fa 2 h", "ahir", "fa 3 dies") per al
+// feed, on cada minut compta. Diferent de faTemps (que és pensada per a
+// l'"últim cop" d'una activitat i no necessita tanta precisió).
+export function faTempsPrecis(dataIso) {
+  const data = new Date(dataIso)
+  const araMs = Date.now()
+  const minuts = (araMs - data.getTime()) / 60_000
+
+  if (minuts < 1) return 'ara mateix'
+  if (minuts < 60) return `fa ${Math.floor(minuts)} min`
+
+  const hores = minuts / 60
+  if (hores < 24) return `fa ${Math.floor(hores)} h`
+
+  const iniciAvui = iniciPeriodeLocal('day', new Date(araMs))
+  const iniciAhir = new Date(iniciAvui.getTime() - 24 * 3_600_000)
+  if (data >= iniciAhir && data < iniciAvui) return 'ahir'
+
+  // Diferència en dies de calendari (no en múltiples de 24h reals): l'inici
+  // del dia local que conté `data` és l'ancoratge, no `data` mateixa.
+  const iniciDelDia = iniciPeriodeLocal('day', data)
+  const dies = Math.round((iniciAvui.getTime() - iniciDelDia.getTime()) / (24 * 3_600_000))
+  return `fa ${dies} ${dies === 1 ? 'dia' : 'dies'}`
+}

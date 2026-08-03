@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from './context/useAuth'
 import Login from './pages/Login'
 import Activitats from './pages/Activitats'
+import Feed from './pages/Feed'
 import Rancing from './pages/Rancing'
 
 function IconaActivitats() {
@@ -44,8 +45,28 @@ function IconaRanquing() {
   )
 }
 
+function IconaFeed() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="14" height="12" rx="2" />
+      <circle cx="7.5" cy="8.5" r="1.5" />
+      <path d="M3 14l4-4 3 3 3-3 4 4" />
+    </svg>
+  )
+}
+
 const PESTANYES = [
   { id: 'activitats', nom: 'Activitats', Icona: IconaActivitats },
+  { id: 'feed', nom: 'Feed', Icona: IconaFeed },
   { id: 'ranquing', nom: 'Rànquing', Icona: IconaRanquing },
 ]
 
@@ -105,11 +126,11 @@ function App() {
 
       <main className="flex-1 pb-16">
         {profile ? (
-          pestanya === 'activitats' ? (
-            <Activitats />
-          ) : (
-            <Rancing />
-          )
+          <>
+            {pestanya === 'activitats' && <Activitats />}
+            {pestanya === 'feed' && <Feed />}
+            {pestanya === 'ranquing' && <Rancing />}
+          </>
         ) : (
           <p className="p-4 text-sm text-calent">No s'ha pogut carregar el teu perfil.</p>
         )}

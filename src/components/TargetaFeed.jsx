@@ -1,0 +1,43 @@
+import { faTempsPrecis } from '../lib/temps'
+
+export default function TargetaFeed({ completion, nomAutor, fotoUrl }) {
+  const activitat = completion.activitats
+  const pendent = completion.estat === 'pendent'
+
+  return (
+    <article className="bisell overflow-hidden rounded-2xl border border-vora bg-targeta">
+      <div className="flex items-center gap-3 p-4 pb-3">
+        <span className="text-3xl leading-none">{activitat?.emoji}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display font-medium text-tinta">{activitat?.nom}</p>
+          <p className="truncate font-body text-xs text-tinta-sec">
+            {nomAutor} · {faTempsPrecis(completion.created_at)}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 font-display text-2xl font-bold ${
+            pendent ? 'text-tinta-sec' : 'text-panda'
+          }`}
+        >
+          {completion.punts_base_snapshot}
+        </span>
+      </div>
+
+      {fotoUrl ? (
+        <img src={fotoUrl} alt="" className="aspect-square w-full object-cover" />
+      ) : (
+        <div className="flex aspect-square w-full items-center justify-center bg-paper">
+          <span className="text-7xl">{activitat?.emoji}</span>
+        </div>
+      )}
+
+      <div className="p-4">
+        {pendent && (
+          <span className="rounded-full border border-vora bg-vora px-2 py-0.5 font-body text-xs text-tinta-sec">
+            pendent de validar
+          </span>
+        )}
+      </div>
+    </article>
+  )
+}
