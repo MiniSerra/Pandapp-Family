@@ -112,6 +112,14 @@ Sense la segona moneda l'app és només una taula de rècords i s'esgota.
   mai en UTC. `date_trunc('day', now())` directament fa que el dia comenci a les
   2h de la matinada. La funció SQL `inici_periode_local(unitat, moment)` ho
   centralitza i s'ha de fer servir sempre en lloc de truncar a mà.
+- **Implementació fase 1:** els tres rànquings es calculen **en client**
+  (`src/lib/ranquing.js`), sense funció SQL ni vista pròpia. Es llegeixen les
+  `participacions` (amb la seva `completion`) de la família dels últims ~35
+  dies i se sumen `punts_assignats` per usuari en JavaScript, filtrant cada
+  rànquing per `iniciPeriodeLocal('day' | 'week' | 'month')` — la mateixa
+  rèplica en JS de `inici_periode_local` que ja fa servir el progrés diari
+  d'`Activitats.jsx` (`src/lib/temps.js`). Surten tots els membres de la
+  família encara que tinguin 0 punts en el període.
 
 ### Objectiu col·lectiu
 
