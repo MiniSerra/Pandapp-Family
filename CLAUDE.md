@@ -203,7 +203,24 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 ## Fotos
 
 - **Compressió al navegador abans de pujar:** canvas → redimensionar a 1080px →
-  WebP qualitat 0.7 (~150 KB). Miniatura de 300px per al feed.
+  WebP qualitat 0.7 (~150 KB), amb fallback a JPEG qualitat 0.8 si el navegador
+  no suporta WebP. Miniatura de 300px per al feed, mateix format/qualitat.
+  Implementat a `src/lib/fotos.js` (`comprimirImatge`).
+- **Bucket privat `fotos-tasques`.** Esquema de ruta:
+  `{familia_id}/{identificador}/original.<ext>` i
+  `{familia_id}/{identificador}/thumb.<ext>` (`<ext>` és `webp` o, en fallback,
+  `jpg`). `{identificador}` **no** ha de coincidir amb l'id real de la
+  `completion`: com que el client no el coneix fins que `reclamar_activitat`
+  s'executa, es fa servir una carpeta temporal `pendent-{uuid}` generada al
+  client (`crypto.randomUUID()`). Un cop pujades les fotos no es mouen ni es
+  renombren encara que la reclamació tingui èxit — l'únic que verifiquen les
+  polítiques de RLS (`supabase/storage.sql`) és que el primer segment de la
+  ruta sigui la `familia_id` de qui puja/llegeix.
+- **URLs signades:** es generen amb `createSignedUrl`, caducitat de 60 minuts.
+  N'hi ha prou perquè `reclamar_activitat` les guardi a `foto_url`/`thumb_url`
+  just després de pujar; el feed i el perfil n'hauran de generar una de nova
+  en cada visualització futura (una URL signada caducada no es pot "refrescar"
+  sola).
 - **Esborrat automàtic als 14 dies** amb cron: posar `foto_url = NULL`
   **i esborrar el fitxer del bucket**. Si només es neteja la base de dades, queden
   fitxers orfes acumulant-se fins a omplir la quota.
@@ -213,10 +230,12 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 - **Ordre pujada foto / reclamació:** la foto es puja al bucket abans de cridar
   `reclamar_activitat` (cal la URL per passar-la a la funció). Si la crida falla
   (p. ex. cooldown actiu), el frontend **ha d'esborrar** el fitxer que acaba de
-  pujar, si no queden fitxers orfes al bucket. Alternativa a valorar més endavant:
-  pujar la foto només després que `reclamar_activitat` hagi tingut èxit (crear
-  primer la completion sense foto i actualitzar-la després), si els fitxers orfes
-  arriben a ser un problema real.
+  pujar, si no queden fitxers orfes al bucket. Implementat a
+  `BottomSheetReclamar.jsx`: si `reclamar_activitat` retorna error, es criden
+  `storage.remove()` sobre `original` i `thumb` abans de mostrar l'error a
+  l'usuari. Si la pròpia pujada (o la generació de la URL signada) falla abans
+  d'arribar a cridar `reclamar_activitat`, es mostra l'error de connexió i no
+  es crida la funció.
 
 ---
 
