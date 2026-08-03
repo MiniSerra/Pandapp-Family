@@ -105,6 +105,51 @@ export default function Feed() {
     return rpcError
   }
 
+  // Actualització optimista: canvia la UI a l'instant i desfà-la si la
+  // petició falla. Els likes no donen punts, no cal cap funció intermèdia.
+  async function handleAlternarLike(completionId) {
+    if (!profile) return
+
+    const completion = completions.find((c) => c.id === completionId)
+    const jaLiked = (completion?.likes ?? []).some((like) => like.usuari_id === profile.id)
+
+    if (jaLiked) {
+      actualitzaCompletion(completionId, (c) => ({
+        ...c,
+        likes: c.likes.filter((like) => like.usuari_id !== profile.id),
+      }))
+
+      const { error: likeError } = await supabase
+        .from('likes')
+        .delete()
+        .eq('completion_id', completionId)
+        .eq('usuari_id', profile.id)
+
+      if (likeError) {
+        actualitzaCompletion(completionId, (c) => ({
+          ...c,
+          likes: [...c.likes, { usuari_id: profile.id }],
+        }))
+      }
+    } else {
+      actualitzaCompletion(completionId, (c) => ({
+        ...c,
+        likes: [...c.likes, { usuari_id: profile.id }],
+      }))
+
+      const { error: likeError } = await supabase
+        .from('likes')
+        .insert({ completion_id: completionId, usuari_id: profile.id })
+
+      if (likeError) {
+        actualitzaCompletion(completionId, (c) => ({
+          ...c,
+          likes: c.likes.filter((like) => like.usuari_id !== profile.id),
+        }))
+      }
+    }
+  }
+
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -149,6 +194,7 @@ export default function Feed() {
           fotoUrl={fotosUrl[completion.id]}
           jo={profile?.id}
           onValidar={handleValidar}
+          onAlternarLike={handleAlternarLike}
         />
       ))}
     </div>
