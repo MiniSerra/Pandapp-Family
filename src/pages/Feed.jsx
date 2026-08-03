@@ -82,6 +82,29 @@ export default function Feed() {
     carregar()
   }, [carregar])
 
+  function actualitzaCompletion(id, actualitza) {
+    setCompletions((actual) => actual.map((c) => (c.id === id ? actualitza(c) : c)))
+  }
+
+  // Retorna l'error de Postgres (o null si tot ha anat bé) perquè la
+  // targeta el mostri; actualitza l'estat en local sense recarregar tota
+  // la llista.
+  async function handleValidar(completionId) {
+    const { data, error: rpcError } = await supabase.rpc('validar_completion', {
+      p_completion_id: completionId,
+    })
+
+    if (!rpcError) {
+      actualitzaCompletion(completionId, (c) => ({
+        ...c,
+        estat: data.estat,
+        validada_per: data.validada_per,
+      }))
+    }
+
+    return rpcError
+  }
+
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -124,6 +147,8 @@ export default function Feed() {
           completion={completion}
           nomAutor={perfils[completion.creada_per] ?? 'algú'}
           fotoUrl={fotosUrl[completion.id]}
+          jo={profile?.id}
+          onValidar={handleValidar}
         />
       ))}
     </div>

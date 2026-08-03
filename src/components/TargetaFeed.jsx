@@ -1,8 +1,22 @@
+import { useState } from 'react'
 import { faTempsPrecis } from '../lib/temps'
 
-export default function TargetaFeed({ completion, nomAutor, fotoUrl }) {
+export default function TargetaFeed({ completion, nomAutor, fotoUrl, jo, onValidar }) {
+  const [validant, setValidant] = useState(false)
+  const [errorValidar, setErrorValidar] = useState('')
+
   const activitat = completion.activitats
   const pendent = completion.estat === 'pendent'
+  const socJoQuiLHaFet = completion.creada_per === jo
+  const potValidar = pendent && !socJoQuiLHaFet
+
+  async function handleConfirmar() {
+    setValidant(true)
+    setErrorValidar('')
+    const err = await onValidar(completion.id)
+    setValidant(false)
+    if (err) setErrorValidar(err.message)
+  }
 
   return (
     <article className="bisell overflow-hidden rounded-2xl border border-vora bg-targeta">
@@ -32,11 +46,27 @@ export default function TargetaFeed({ completion, nomAutor, fotoUrl }) {
       )}
 
       <div className="p-4">
-        {pendent && (
-          <span className="rounded-full border border-vora bg-vora px-2 py-0.5 font-body text-xs text-tinta-sec">
-            pendent de validar
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {pendent && (
+            <span className="rounded-full border border-vora bg-vora px-2 py-0.5 font-body text-xs text-tinta-sec">
+              pendent de validar
+            </span>
+          )}
+          {potValidar && (
+            <button
+              type="button"
+              onClick={handleConfirmar}
+              disabled={validant}
+              className="rounded-md bg-panda px-3 py-1.5 font-body text-sm font-medium text-paper disabled:opacity-50"
+            >
+              {validant ? 'Confirmant…' : 'Confirmar'}
+            </button>
+          )}
+          {pendent && socJoQuiLHaFet && (
+            <span className="font-body text-xs text-tinta-sec">Esperant confirmació</span>
+          )}
+        </div>
+        {errorValidar && <p className="mt-2 text-xs text-calent">{errorValidar}</p>}
       </div>
     </article>
   )
