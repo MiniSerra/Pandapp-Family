@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { iniciPeriodeLocal, faTemps } from '../lib/temps'
 import FilaActivitat from '../components/FilaActivitat'
+import BlocActivitat from '../components/BlocActivitat'
 import BottomSheetReclamar from '../components/BottomSheetReclamar'
 
 const ORDRE_CATEGORIES = [
@@ -29,12 +30,52 @@ const NOM_CATEGORIES = {
   familiars: 'Familiars',
 }
 
+// Xips de categoria: ordre i emoji propis, diferents de l'ordre de les
+// seccions de la llista (aquí el Panda va primer).
+const CATEGORIA_CHIPS = [
+  { id: 'tot', nom: 'Tot', emoji: null },
+  { id: 'panda', nom: 'Panda', emoji: '🐾' },
+  { id: 'cuina', nom: 'Cuina', emoji: '🍳' },
+  { id: 'bany', nom: 'Bany', emoji: '🚿' },
+  { id: 'roba', nom: 'Roba', emoji: '👕' },
+  { id: 'casa', nom: 'Casa', emoji: '🏠' },
+  { id: 'compres', nom: 'Compres', emoji: '🛒' },
+  { id: 'manteniment', nom: 'Manteniment', emoji: '🔧' },
+  { id: 'personals', nom: 'Personals', emoji: '💪' },
+  { id: 'familiars', nom: 'Familiars', emoji: '👨‍👩‍👧' },
+]
+
+const CLAU_VISTA = 'pandapp:vista-activitats'
+
 // Historial que fem servir per pintar cooldowns i "fa temps". La veritat del
 // cooldown la decideix sempre reclamar_activitat al servidor; això és només
 // per no mostrar files disponibles que en realitat rebutjaria el servidor.
 const DIES_HISTORIC = 30
 // Llindar de "temps sense fer-se" quan l'activitat no té periode_normal_h.
 const PERIODE_NORMAL_DEFECTE_H = 48
+
+// Treu els accents comparant cada caràcter, ja descompost en NFD, contra el
+// rang Unicode dels diacrítics combinables (0x0300-0x036f), sense fer servir
+// una classe de regex amb caràcters combinables literals al codi font.
+function esMarcaCombinable(caracter) {
+  const codi = caracter.codePointAt(0)
+  return codi >= 0x0300 && codi <= 0x036f
+}
+
+function normalitza(text) {
+  return Array.from(text.normalize('NFD'))
+    .filter((caracter) => !esMarcaCombinable(caracter))
+    .join('')
+    .toLowerCase()
+}
+
+function llegeixVistaGuardada() {
+  try {
+    return localStorage.getItem(CLAU_VISTA) === 'blocs' ? 'blocs' : 'llista'
+  } catch {
+    return 'llista'
+  }
+}
 
 function calculaEstat(activitat, ultima, perfils) {
   if (!ultima) {
@@ -111,6 +152,93 @@ function AnellProgres({ punts, llindar }) {
   )
 }
 
+function IconaLlista() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <line x1="4" y1="5" x2="16" y2="5" />
+      <line x1="4" y1="10" x2="16" y2="10" />
+      <line x1="4" y1="15" x2="16" y2="15" />
+    </svg>
+  )
+}
+
+function IconaBlocs() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="6" height="6" rx="1" />
+      <rect x="11" y="3" width="6" height="6" rx="1" />
+      <rect x="3" y="11" width="6" height="6" rx="1" />
+      <rect x="11" y="11" width="6" height="6" rx="1" />
+    </svg>
+  )
+}
+
+function BarraCercaIVista({ cerca, onCerca, vista, onVista }) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3">
+      <input
+        type="text"
+        value={cerca}
+        onChange={(event) => onCerca(event.target.value)}
+        placeholder="Cerca una activitat…"
+        className="bisell min-w-0 flex-1 rounded-xl border border-vora bg-targeta px-3 py-2 text-sm text-tinta placeholder:text-tinta-sec focus:outline-none"
+      />
+      <div className="flex shrink-0 gap-1">
+        <button
+          type="button"
+          onClick={() => onVista('llista')}
+          aria-label="Vista de llista"
+          aria-pressed={vista === 'llista'}
+          className={`rounded-lg p-2 ${vista === 'llista' ? 'bg-vora text-tinta' : 'text-tinta-sec'}`}
+        >
+          <IconaLlista />
+        </button>
+        <button
+          type="button"
+          onClick={() => onVista('blocs')}
+          aria-label="Vista de blocs"
+          aria-pressed={vista === 'blocs'}
+          className={`rounded-lg p-2 ${vista === 'blocs' ? 'bg-vora text-tinta' : 'text-tinta-sec'}`}
+        >
+          <IconaBlocs />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function XipsCategoria({ actiu, onCanvia }) {
+  return (
+    <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3">
+      {CATEGORIA_CHIPS.map((chip) => {
+        const seleccionat = actiu === chip.id
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            onClick={() => onCanvia(chip.id)}
+            className={`shrink-0 rounded-full border px-3 py-1.5 font-body text-sm whitespace-nowrap transition-colors ${
+              seleccionat
+                ? 'border-panda bg-panda text-paper'
+                : 'border-vora bg-targeta text-tinta-sec'
+            }`}
+          >
+            {chip.emoji ? `${chip.emoji} ${chip.nom}` : chip.nom}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Activitats() {
   const { profile } = useAuth()
   const [activitats, setActivitats] = useState([])
@@ -120,6 +248,18 @@ export default function Activitats() {
   const [error, setError] = useState('')
   const [activitatSeleccionada, setActivitatSeleccionada] = useState(null)
   const [flaixId, setFlaixId] = useState(null)
+  const [cerca, setCerca] = useState('')
+  const [categoriaActiva, setCategoriaActiva] = useState('tot')
+  const [vista, setVista] = useState(llegeixVistaGuardada)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAU_VISTA, vista)
+    } catch {
+      // localStorage no disponible (mode privat, etc.): la preferència
+      // simplement no es recorda entre sessions.
+    }
+  }, [vista])
 
   const carregar = useCallback(async () => {
     if (!profile) return
@@ -176,14 +316,41 @@ export default function Activitats() {
     return mapa
   }, [completions])
 
-  const activitatsPerCategoria = useMemo(() => {
+  const activitatsFiltrades = useMemo(() => {
+    let resultat = activitats
+
+    if (categoriaActiva !== 'tot') {
+      resultat = resultat.filter((act) => act.categoria === categoriaActiva)
+    }
+
+    const cercaNorm = normalitza(cerca.trim())
+    if (cercaNorm) {
+      resultat = resultat.filter((act) => normalitza(act.nom).includes(cercaNorm))
+    }
+
+    return resultat
+  }, [activitats, categoriaActiva, cerca])
+
+  // Amb "Tot" es reagrupa per categoria (com abans); amb una categoria
+  // concreta seleccionada ja no cal repetir la capçalera de categoria.
+  const seccions = useMemo(() => {
+    if (categoriaActiva !== 'tot') {
+      return activitatsFiltrades.length > 0
+        ? [{ categoria: null, activitats: activitatsFiltrades }]
+        : []
+    }
+
     const grups = {}
     for (const cat of ORDRE_CATEGORIES) grups[cat] = []
-    for (const act of activitats) {
+    for (const act of activitatsFiltrades) {
       grups[act.categoria]?.push(act)
     }
-    return grups
-  }, [activitats])
+
+    return ORDRE_CATEGORIES.filter((cat) => grups[cat].length > 0).map((cat) => ({
+      categoria: cat,
+      activitats: grups[cat],
+    }))
+  }, [activitatsFiltrades, categoriaActiva])
 
   const puntsAvui = useMemo(() => {
     if (!profile) return 0
@@ -235,17 +402,26 @@ export default function Activitats() {
         <AnellProgres punts={puntsAvui} llindar={llindar} />
       </div>
 
-      {ORDRE_CATEGORIES.map((cat) => {
-        const llista = activitatsPerCategoria[cat]
-        if (!llista || llista.length === 0) return null
+      <BarraCercaIVista cerca={cerca} onCerca={setCerca} vista={vista} onVista={setVista} />
+      <XipsCategoria actiu={categoriaActiva} onCanvia={setCategoriaActiva} />
 
-        return (
-          <section key={cat} className="px-4 py-3">
+      {seccions.length === 0 && (
+        <p className="px-4 py-10 text-center text-sm text-tinta-sec">
+          Cap activitat coincideix. Prova un altre terme o una altra categoria.
+        </p>
+      )}
+
+      {seccions.map((seccio) => (
+        <section key={seccio.categoria ?? 'filtrada'} className="px-4 py-3">
+          {seccio.categoria && (
             <h2 className="mb-2 font-display text-xs font-medium uppercase tracking-wide text-tinta-sec">
-              {NOM_CATEGORIES[cat]}
+              {NOM_CATEGORIES[seccio.categoria]}
             </h2>
+          )}
+
+          {vista === 'llista' ? (
             <div className="bisell divide-y divide-vora overflow-hidden rounded-2xl border border-vora bg-targeta">
-              {llista.map((act) => (
+              {seccio.activitats.map((act) => (
                 <FilaActivitat
                   key={act.id}
                   activitat={act}
@@ -255,9 +431,21 @@ export default function Activitats() {
                 />
               ))}
             </div>
-          </section>
-        )
-      })}
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {seccio.activitats.map((act) => (
+                <BlocActivitat
+                  key={act.id}
+                  activitat={act}
+                  estat={calculaEstat(act, ultimaPerActivitat[act.id], perfils)}
+                  flaix={flaixId === act.id}
+                  onSeleccionar={() => setActivitatSeleccionada(act)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
 
       {activitatSeleccionada && (
         <BottomSheetReclamar

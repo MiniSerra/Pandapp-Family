@@ -409,6 +409,30 @@ com a variables CSS a `index.css`.
 - El progrés del dia, a la capçalera, en un anell circular (no una barra
   plana) amb els punts al mig en Bricolage Grotesque 700 gros.
 
+### Cerca, vista i filtres
+
+Amb les 66 activitats carregades, la llista necessita tres eines de navegació,
+totes en client (JavaScript pur sobre les activitats ja carregades, sense
+tornar a Supabase):
+
+- **Cercador** de text fix a dalt, sota la capçalera de progrés. Filtra per
+  nom mentre s'escriu, sense esperar a prémer res.
+- **Interruptor llista / blocs**, a la dreta del cercador (dues icones petites).
+  - *Llista*: com ara, fila amb nom i "fa X dies" a sota.
+  - *Blocs*: graella de 3 columnes, emoji gros a dalt i pastilla de punts a
+    sota de cada bloc. Sense el text de temps (no hi ha espai); el color de
+    la pastilla ja comunica la urgència.
+  - La preferència es recorda a `localStorage` (és el navegador del client,
+    no el `window.storage` d'artifacts — aquí sí és el lloc correcte).
+- **Xips de categoria** horitzontals i lliscables per sobre de la llista:
+  `Tot · 🐾 Panda · 🍳 Cuina · 🚿 Bany · 👕 Roba · 🏠 Casa · 🛒 Compres ·
+  🔧 Manteniment · 💪 Personals · 👨‍👩‍👧 Familiars`. Un de sol actiu cada
+  vegada; "Tot" és l'estat per defecte. Xips per tocar, no un desplegable
+  clàssic — més ràpid en mòbil.
+
+Cerca, vista i filtre de categoria es combinen entre si (p. ex. cercar dins
+d'una categoria concreta).
+
 ### Escriptura
 
 - Sempre en català, tractament informal.

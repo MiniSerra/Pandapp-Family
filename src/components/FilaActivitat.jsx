@@ -1,10 +1,5 @@
 import { disponibleEn } from '../lib/temps'
-
-const ESTIL_PASTILLA = {
-  neutre: 'border-vora bg-vora text-tinta',
-  tebi: 'border-tebi-vora bg-tebi-fons text-tebi',
-  calent: 'border-calent-vora bg-calent-fons text-calent',
-}
+import PastillaPunts from './PastillaPunts'
 
 export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }) {
   const { bloquejada, fetPer, faTempsText, calorPunts, remainingMs } = estat
@@ -33,11 +28,7 @@ export default function FilaActivitat({ activitat, estat, flaix, onSeleccionar }
           ✓
         </span>
       ) : (
-        <span
-          className={`bisell shrink-0 rounded-full border px-3 py-1 font-display text-sm font-bold ${ESTIL_PASTILLA[calorPunts]}`}
-        >
-          {activitat.punts_base}
-        </span>
+        <PastillaPunts punts={activitat.punts_base} calor={calorPunts} />
       )}
     </>
   )

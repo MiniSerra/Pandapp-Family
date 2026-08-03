@@ -34,3 +34,12 @@ body {
   font-family: var(--font-body);
   color-scheme: dark;
 }
+
+/* Xips de categoria: desplaçables horitzontalment sense barra de scroll visible. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
