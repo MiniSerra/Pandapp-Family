@@ -489,11 +489,12 @@ d'una categoria concreta).
 
 1. **Fase 1 (feta):** auth, catàleg d'activitats, reclamar tasca amb foto,
    punts, els tres rànquings, cooldown per activitat.
-2. **Fase 2 (en curs):** escalada per oblit i validació creuada **ja fetes al
-   backend** (`reclamar_activitat` calcula l'escalada; les completions no
-   personals neixen `'pendent'` i `validar_completion` les valida). **Pendent:**
-   el feed (llista de completions, amb la seva foto, per validar-les des de
-   l'app en lloc de l'SQL Editor) i els likes.
+2. **Fase 2 (feta):** escalada per oblit i validació creuada al backend
+   (`reclamar_activitat` calcula l'escalada; les completions no personals
+   neixen `'pendent'` i `validar_completion` les valida, mai el propi
+   creador). Feed (`src/pages/Feed.jsx`): targeta amb foto o emoji, punts en
+   `--panda`/`--tinta-sec` segons validada/pendent, botó "Confirmar" per a
+   qui no l'ha creada, likes (taula `likes`, sense donar punts).
 3. **Fase 3:** ratxes, monedes i recompenses, tasques compartides, estat del Panda.
 4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
 
