@@ -1,9 +1,80 @@
+import { useState } from 'react'
 import { useAuth } from './context/useAuth'
 import Login from './pages/Login'
 import Activitats from './pages/Activitats'
+import Rancing from './pages/Rancing'
+
+function IconaActivitats() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 5.5l1.5 1.5L8 4" />
+      <line x1="10" y1="5.5" x2="16" y2="5.5" />
+      <path d="M4 10.5l1.5 1.5L8 9" />
+      <line x1="10" y1="10.5" x2="16" y2="10.5" />
+      <path d="M4 15.5l1.5 1.5L8 14" />
+      <line x1="10" y1="15.5" x2="16" y2="15.5" />
+    </svg>
+  )
+}
+
+function IconaRanquing() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <line x1="4" y1="16" x2="4" y2="11" />
+      <line x1="10" y1="16" x2="10" y2="4" />
+      <line x1="16" y1="16" x2="16" y2="8" />
+    </svg>
+  )
+}
+
+const PESTANYES = [
+  { id: 'activitats', nom: 'Activitats', Icona: IconaActivitats },
+  { id: 'ranquing', nom: 'Rànquing', Icona: IconaRanquing },
+]
+
+function BarraNavegacio({ pestanya, onCanvia }) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-2 border-t border-vora bg-targeta px-4 py-2">
+      {PESTANYES.map(({ id, nom, Icona }) => {
+        const activa = pestanya === id
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onCanvia(id)}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl px-3 py-2 transition-colors ${
+              activa ? 'bisell border border-vora bg-vora text-panda' : 'text-tinta-sec'
+            }`}
+          >
+            <Icona />
+            <span className="font-body text-xs">{nom}</span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
 
 function App() {
   const { session, profile, loading, signOut } = useAuth()
+  const [pestanya, setPestanya] = useState('activitats')
 
   if (loading) {
     return (
@@ -32,11 +103,19 @@ function App() {
         </button>
       </header>
 
-      {profile ? (
-        <Activitats />
-      ) : (
-        <p className="p-4 text-sm text-calent">No s'ha pogut carregar el teu perfil.</p>
-      )}
+      <main className="flex-1 pb-16">
+        {profile ? (
+          pestanya === 'activitats' ? (
+            <Activitats />
+          ) : (
+            <Rancing />
+          )
+        ) : (
+          <p className="p-4 text-sm text-calent">No s'ha pogut carregar el teu perfil.</p>
+        )}
+      </main>
+
+      {profile && <BarraNavegacio pestanya={pestanya} onCanvia={setPestanya} />}
     </div>
   )
 }
