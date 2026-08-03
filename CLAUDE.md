@@ -314,7 +314,7 @@ completions         id, activitat_id, familia_id, creada_per, versio_punts,
                     validada_per, estat (pendent|validada), created_at
 participacions      completion_id, usuari_id, punts_assignats, confirmat,
                     es_qui_puja
-likes               completion_id, usuari_id
+likes               completion_id, usuari_id, created_at
 propostes           id, tipus, activitat_id, payload, proposada_per, estat, caduca
 vots                proposta_id, usuari_id, vot, punts_suggerits, created_at
 torns               activitat_id, usuari_id, setmana
@@ -334,6 +334,12 @@ temporada, l'històric no s'ha de recalcular sol.
 **Important:** `familia_id` i `creada_per` estan denormalitzats a `completions`
 perquè les polítiques de RLS i les consultes de feed/rànquing no calgui que facin
 `JOIN` a `activitats` per saber de qui o de quina família és cada fila.
+
+**Important:** `likes` és l'única taula (a banda de les de fases futures) on el
+client escriu directament amb polítiques RLS normals, sense passar per cap
+funció `security definer`. No dona punts ni afecta cap regla de negoci —
+només compta "aplaudiments"—, així que no calia protegir-la darrere d'una
+funció com `reclamar_activitat`. Definida a `supabase/likes.sql`.
 
 ---
 
