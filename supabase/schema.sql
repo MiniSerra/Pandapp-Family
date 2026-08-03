@@ -9,9 +9,11 @@
 --
 -- Decisions de disseny rellevants (veure CLAUDE.md):
 --   - RLS activat a totes les taules; regla base: només la teva família.
---   - `completions.estat` es queda a 'validada' per defecte en fase 1
---     (no hi ha validació creuada fins la fase 2); les columnes `estat`
---     i `validada_per` ja existeixen des d'ara per no migrar després.
+--   - Validació creuada (fase 2): `completions` neix `'pendent'`, excepte
+--     les personals que neixen `'validada'` a l'instant (ningú més les pot
+--     confirmar). `validar_completion` la posa a `'validada'` — sempre algú
+--     diferent de qui l'ha creat. Els punts d'una completion `'pendent'`
+--     no compten al progrés diari ni als rànquings (filtrat al client).
 --   - El cooldown per activitat SÍ entra en fase 1, però NO es comprova
 --     al client: es fa sempre dins de la funció `reclamar_activitat`,
 --     en la mateixa transacció que crea la completion.
@@ -159,11 +161,13 @@ create table public.completions (
   pot_total             integer not null check (pot_total >= 0),
   foto_url              text,
   thumb_url             text,
-  -- fase 2: qui ha validat l'entrada des del feed.
+  -- qui ha validat l'entrada (fase 2: via validar_completion). Sempre algú
+  -- diferent de creada_per.
   validada_per          uuid references public.profiles (id) on delete set null,
-  -- fase 1: es queda sempre a 'validada' en crear-se (no hi ha
-  -- validació creuada fins la fase 2).
-  estat                 text not null default 'validada' check (
+  -- neix 'pendent' (validar_completion la passa a 'validada'), excepte les
+  -- activitats personals, que neixen 'validada' directament perquè ningú
+  -- més les pot confirmar.
+  estat                 text not null default 'pendent' check (
     estat in ('pendent', 'validada')
   ),
   -- el timestamp el posa el servidor (default now()), mai el mòbil.
@@ -171,7 +175,7 @@ create table public.completions (
 );
 
 comment on table public.completions is
-  'Una reclamació d''una activitat feta en un moment concret. Fase 1: estat sempre ''validada'' en crear-se. S''insereix/esborra únicament via reclamar_activitat / anullar_completion.';
+  'Una reclamació d''una activitat feta en un moment concret. Neix ''pendent'' (''validada'' si és personal) fins que validar_completion la valida. S''insereix/esborra únicament via reclamar_activitat / anullar_completion.';
 
 -- data de creació: rànquings diari/setmanal/mensual filtren per rang de dates.
 create index idx_completions_created_at on public.completions (created_at);
@@ -313,7 +317,8 @@ create trigger on_auth_user_created
 -- =====================================================================
 -- Únic punt d'entrada per crear una completion. Tota la lògica de
 -- negoci (cooldown, límit personal diari, foto obligatòria, càlcul de
--- l'escalada per oblit) viu aquí, mai al client, perquè és l'únic lloc
+-- l'escalada per oblit, estat inicial de validació) viu aquí, mai al
+-- client, perquè és l'únic lloc
 -- on es pot garantir atomicitat (bloqueig de fila) i que ningú se salti
 -- les regles cridant directament la taula.
 create or replace function public.reclamar_activitat(
@@ -336,6 +341,7 @@ declare
   v_dies_passats_periode numeric;
   v_multiplicador        numeric;
   v_punts_calculats      integer;
+  v_estat_inicial        text;
   v_completion           public.completions%rowtype;
 begin
   if v_usuari_id is null then
@@ -411,14 +417,19 @@ begin
     end if;
   end if;
 
+  -- Validació creuada (fase 2): les personals es validen soles a l'instant
+  -- (ningú més les pot confirmar); la resta neix 'pendent' fins que un
+  -- altre membre de la família la valida amb validar_completion.
+  v_estat_inicial := case when v_activitat.es_personal then 'validada' else 'pendent' end;
+
   insert into public.completions (
     activitat_id, familia_id, creada_per,
     versio_punts, punts_base_snapshot, pot_total,
-    foto_url, thumb_url
+    foto_url, thumb_url, estat
   ) values (
     v_activitat.id, v_familia_id, v_usuari_id,
     v_activitat.versio, v_punts_calculats, v_punts_calculats,
-    p_foto_url, p_thumb_url
+    p_foto_url, p_thumb_url, v_estat_inicial
   )
   returning * into v_completion;
 
@@ -433,10 +444,70 @@ end;
 $$;
 
 comment on function public.reclamar_activitat(uuid, text, text) is
-  'Únic punt d''entrada per reclamar una activitat: comprova cooldown i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, i crea completion + participació en una sola transacció.';
+  'Únic punt d''entrada per reclamar una activitat: comprova cooldown i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció.';
 
 revoke all on function public.reclamar_activitat(uuid, text, text) from public;
 grant execute on function public.reclamar_activitat(uuid, text, text) to authenticated;
+
+-- =====================================================================
+-- FUNCIÓ: validar_completion
+-- =====================================================================
+-- Valida una completion 'pendent' (fase 2). El validador MAI pot ser qui
+-- l'ha creat — de moment només hi ha un participant per completion, així
+-- que només cal comparar amb `creada_per`; quan arribin els participants
+-- múltiples (fase 3) caldrà revisar aquesta comprovació. Security definer
+-- perquè el client no necessita (ni té) una política d'UPDATE directa
+-- sobre `completions`: tota escriptura de validació passa per aquí.
+create or replace function public.validar_completion(p_completion_id uuid)
+returns public.completions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_usuari_id  uuid := auth.uid();
+  v_completion public.completions%rowtype;
+begin
+  if v_usuari_id is null then
+    raise exception 'Cal estar autenticat per validar una reclamació.';
+  end if;
+
+  select * into v_completion
+  from public.completions
+  where id = p_completion_id
+  for update;
+
+  if not found then
+    raise exception 'Aquesta reclamació no existeix.';
+  end if;
+
+  if v_completion.familia_id <> public.familia_id_actual() then
+    raise exception 'Aquesta reclamació no pertany a la teva família.';
+  end if;
+
+  if v_completion.creada_per = v_usuari_id then
+    raise exception 'No pots validar una reclamació que has creat tu mateix.';
+  end if;
+
+  if v_completion.estat <> 'pendent' then
+    raise exception 'Aquesta reclamació ja no està pendent de validació.';
+  end if;
+
+  update public.completions
+  set estat = 'validada',
+      validada_per = v_usuari_id
+  where id = p_completion_id
+  returning * into v_completion;
+
+  return v_completion;
+end;
+$$;
+
+comment on function public.validar_completion(uuid) is
+  'Valida una completion pendent creada per un altre membre de la família (el creador no es pot autovalidar). Posa estat = ''validada'' i validada_per = auth.uid().';
+
+revoke all on function public.validar_completion(uuid) from public;
+grant execute on function public.validar_completion(uuid) to authenticated;
 
 -- =====================================================================
 -- FUNCIÓ: anullar_completion
@@ -444,7 +515,9 @@ grant execute on function public.reclamar_activitat(uuid, text, text) to authent
 -- Permet desfer una reclamació feta per error, només dins d'una finestra
 -- curta. Esborra la completion (i, en cascada, la seva participació) i
 -- retorna les rutes de la foto/miniatura perquè el frontend les esborri
--- del bucket de Storage (des de SQL no es pot tocar Storage).
+-- del bucket de Storage (des de SQL no es pot tocar Storage). Els 15
+-- minuts valen igual tant si la completion és 'pendent' com 'validada'
+-- (no hi ha cap comprovació d'estat, expressament).
 create or replace function public.anullar_completion(p_completion_id uuid)
 returns table (foto_url text, thumb_url text)
 language plpgsql
@@ -546,9 +619,10 @@ create policy "completions: veure la família" on public.completions
   using (familia_id = public.familia_id_actual());
 
 -- No hi ha política d'INSERT, UPDATE ni DELETE per a `authenticated`: la
--- creació passa sempre per `reclamar_activitat` i l'anul·lació per
--- `anullar_completion` (totes dues security definer, salten la RLS). El
--- flux de validació (fase 2) es dissenyarà més endavant.
+-- creació passa per `reclamar_activitat`, l'anul·lació per
+-- `anullar_completion` i la validació (fase 2) per `validar_completion`
+-- — totes tres security definer, salten la RLS. El client mai actualitza
+-- `completions` directament.
 
 -- ---- participacions -------------------------------------------------------
 -- Es poden veure les participacions de completions de la pròpia família

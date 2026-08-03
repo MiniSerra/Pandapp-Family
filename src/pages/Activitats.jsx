@@ -281,7 +281,7 @@ export default function Activitats() {
       supabase
         .from('completions')
         .select(
-          'id, activitat_id, creada_per, created_at, participacions(usuari_id, punts_assignats)',
+          'id, activitat_id, creada_per, created_at, estat, participacions(usuari_id, punts_assignats)',
         )
         .eq('familia_id', profile.familia_id)
         .gte('created_at', desDe)
@@ -352,11 +352,13 @@ export default function Activitats() {
     }))
   }, [activitatsFiltrades, categoriaActiva])
 
+  // Fase 2: una completion 'pendent' (validació creuada) encara no compta
+  // al progrés del dia, encara que ja s'hagi reclamat.
   const puntsAvui = useMemo(() => {
     if (!profile) return 0
     const iniciAvui = iniciPeriodeLocal('day')
     return completions
-      .filter((c) => new Date(c.created_at) >= iniciAvui)
+      .filter((c) => c.estat === 'validada' && new Date(c.created_at) >= iniciAvui)
       .flatMap((c) => c.participacions ?? [])
       .filter((p) => p.usuari_id === profile.id)
       .reduce((suma, p) => suma + p.punts_assignats, 0)

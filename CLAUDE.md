@@ -83,6 +83,12 @@ arriba al seu sostre en 2 dies; fregar el terra triga 19.
 Les **activitats personals no tenen escalada**. Que ningú hagi llegit en una setmana
 no fa que llegir valgui més.
 
+**Implementat a fase 2:** el càlcul es fa dins de `reclamar_activitat`, mai al
+client, amb arrodoniment normal (no cap amunt — això és per al repartiment de
+tasques compartides, fase 3). El resultat es guarda a
+`completions.punts_base_snapshot`, que a partir d'ara ja no és
+`activitats.punts_base` pla.
+
 ### Ratxes
 
 - **Dia complert** = has arribat al llindar diari de punts (per defecte 100,
@@ -181,11 +187,15 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 
 - Foto obligatòria per a les tasques de casa, cuina, bany, roba i Panda.
 - Les **personals no porten foto** i tenen un **límit de 60 punts al dia**.
-- **Fase 2:** els punts queden **pendents** fins que un altre familiar confirma
-  l'entrada al feed. **Fase 1:** no hi ha validació creuada encara; `estat` es
-  posa directament a `'validada'` en crear la `completion`. Les columnes `estat`
-  i `validada_per` ja existeixen a l'esquema des de la fase 1 perquè la fase 2
-  només canviï la lògica, no calgui migrar la taula.
+- **Validació creuada (backend fet a fase 2):** una `completion` neix
+  `'pendent'`, excepte les **personals**, que neixen `'validada'` a l'instant
+  (ningú més les pot confirmar). Un altre membre de la família —**mai** qui
+  l'ha creat— la valida amb `validar_completion`, que posa `estat = 'validada'`
+  i `validada_per`. Els punts d'una completion `'pendent'` **no compten** al
+  progrés del dia ni als rànquings fins que es valida (filtrat al client, a
+  `Activitats.jsx` i `ranquing.js`). **Encara falta la interfície** (el feed)
+  per validar des de l'app; de moment només des de l'SQL Editor cridant
+  `select public.validar_completion('<id>')`.
 - El timestamp el posa el servidor, mai el mòbil.
 - **Cooldown per tasca (fase 1):** en reclamar, es mira l'última completació
   d'aquella activitat i es bloqueja si no han passat `cooldown_h`. És per
@@ -471,10 +481,13 @@ d'una categoria concreta).
 
 ## Fases
 
-1. **Fase 1 (actual):** auth, catàleg d'activitats, reclamar tasca amb foto, punts,
-   els tres rànquings, **cooldown per activitat**. L'escalada per oblit i la
-   validació creuada encara no.
-2. **Fase 2:** feed, likes, validació creuada, escalada per oblit.
+1. **Fase 1 (feta):** auth, catàleg d'activitats, reclamar tasca amb foto,
+   punts, els tres rànquings, cooldown per activitat.
+2. **Fase 2 (en curs):** escalada per oblit i validació creuada **ja fetes al
+   backend** (`reclamar_activitat` calcula l'escalada; les completions no
+   personals neixen `'pendent'` i `validar_completion` les valida). **Pendent:**
+   el feed (llista de completions, amb la seva foto, per validar-les des de
+   l'app en lloc de l'SQL Editor) i els likes.
 3. **Fase 3:** ratxes, monedes i recompenses, tasques compartides, estat del Panda.
 4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
 

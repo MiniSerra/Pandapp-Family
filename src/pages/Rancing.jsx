@@ -81,7 +81,7 @@ export default function Rancing() {
     const [completionsRes, membresRes] = await Promise.all([
       supabase
         .from('completions')
-        .select('id, created_at, participacions(usuari_id, punts_assignats)')
+        .select('id, created_at, estat, participacions(usuari_id, punts_assignats)')
         .eq('familia_id', profile.familia_id)
         .gte('created_at', desDe),
       supabase.from('profiles').select('id, nom'),

@@ -8,10 +8,12 @@ export const PERIODES_RANQUING = [
 
 // Suma punts_assignats de les participacions d'una llista de completions
 // (cada una amb les seves participacions niades) posteriors a `inici`,
-// agrupats per usuari.
+// agrupats per usuari. Només compten les completions ja validades: les
+// 'pendent' (fase 2, validació creuada) encara no sumen enlloc.
 function sumaPuntsPerUsuari(completions, inici) {
   const sumes = {}
   for (const completion of completions) {
+    if (completion.estat !== 'validada') continue
     if (new Date(completion.created_at) < inici) continue
     for (const participacio of completion.participacions ?? []) {
       sumes[participacio.usuari_id] =
