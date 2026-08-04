@@ -47,6 +47,10 @@ create table public.families (
   -- objectiu de punts setmanals de tota la família (barra de progrés
   -- col·lectiva); ~1500-1800 per a una família de 4 segons CLAUDE.md.
   objectiu_setmanal       integer not null default 1650 check (objectiu_setmanal > 0),
+  -- premi real si s'assoleix l'objectiu setmanal (text lliure, p. ex.
+  -- "Pizza tots junts divendres"). Editable només via SQL Editor de
+  -- moment, no hi ha interfície per canviar-lo.
+  premi_setmanal          text,
   created_at              timestamptz not null default now()
 );
 
@@ -270,6 +274,39 @@ create table public.ratxes (
 
 comment on table public.ratxes is
   'Ratxa de dies complerts per usuari (fase 3). ultim_dia_complert i escut_usat_mes són dates locals d''Europe/Madrid. Només es modifica des de processar_punts_validats.';
+
+-- =====================================================================
+-- TAULA: esdeveniments
+-- =====================================================================
+-- Esdeveniments de sistema que surten al feed barrejats amb les
+-- completions però no en són (sense foto, avatars, like ni comentaris) —
+-- de moment només "objectiu setmanal assolit" (fase 3, veure CLAUDE.md
+-- "Objectiu col·lectiu"). El client MAI hi escriu directament: només
+-- `comprovar_objectiu_setmanal` (security definer).
+--
+-- `unique (familia_id, tipus, setmana)` és el que garanteix que l'esdeveniment
+-- només es crea un cop per setmana per família, fins i tot si dues
+-- validacions creuen el llindar gairebé alhora: `insert ... on conflict do
+-- nothing` és atòmic a nivell de base de dades, a diferència d'una
+-- comprovació prèvia amb un select, que sempre tindria una finestra de
+-- carrera entre dues transaccions concurrents.
+create table public.esdeveniments (
+  id         uuid primary key default gen_random_uuid(),
+  familia_id uuid not null references public.families (id) on delete cascade,
+  tipus      text not null check (tipus in ('objectiu_setmanal')),
+  -- data (local Europe/Madrid) del dilluns que comença la setmana de
+  -- l'esdeveniment — la clau que evita duplicar-lo la mateixa setmana.
+  setmana    date not null,
+  dades      jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+
+  unique (familia_id, tipus, setmana)
+);
+
+comment on table public.esdeveniments is
+  'Esdeveniments de sistema al feed (fase 3): de moment només objectiu_setmanal. unique (familia_id, tipus, setmana) evita duplicar-lo. Només s''hi escriu des de comprovar_objectiu_setmanal.';
+
+create index idx_esdeveniments_familia on public.esdeveniments (familia_id);
 
 -- =====================================================================
 -- FUNCIÓ AUXILIAR: familia_id de l'usuari autenticat
@@ -544,6 +581,59 @@ comment on function public.processar_punts_validats(uuid, uuid, uuid) is
 revoke all on function public.processar_punts_validats(uuid, uuid, uuid) from public;
 
 -- =====================================================================
+-- FUNCIÓ: comprovar_objectiu_setmanal
+-- =====================================================================
+-- Es crida sempre que una completion passa a 'validada' (reclamar_activitat
+-- quan neix ja validada perquè és personal, validar_completion,
+-- confirmar_participacio quan es valida sola): recalcula la suma de
+-- pot_total de la setmana en curs i, si arriba a objectiu_setmanal,
+-- registra l'esdeveniment (fase 3, veure CLAUDE.md "Objectiu col·lectiu").
+-- Suma el POT SENCER de cada completion, no punts_assignats individuals
+-- (l'objectiu és de tota la família, no depèn de qui ha confirmat què).
+create or replace function public.comprovar_objectiu_setmanal(p_familia_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inici_setmana timestamptz := public.inici_periode_local('week');
+  v_suma          integer;
+  v_objectiu      integer;
+  v_premi         text;
+begin
+  select objectiu_setmanal, premi_setmanal into v_objectiu, v_premi
+  from public.families
+  where id = p_familia_id;
+
+  select coalesce(sum(pot_total), 0) into v_suma
+  from public.completions
+  where familia_id = p_familia_id
+    and estat = 'validada'
+    and created_at >= v_inici_setmana;
+
+  if v_suma < v_objectiu then
+    return;
+  end if;
+
+  -- `on conflict do nothing` sobre unique (familia_id, tipus, setmana) és
+  -- atòmic: encara que dues validacions creuin el llindar gairebé alhora,
+  -- només una de les dues transaccions guanya la inserció.
+  insert into public.esdeveniments (familia_id, tipus, setmana, dades)
+  values (
+    p_familia_id, 'objectiu_setmanal', v_inici_setmana::date,
+    jsonb_build_object('suma', v_suma, 'objectiu', v_objectiu, 'premi', v_premi)
+  )
+  on conflict (familia_id, tipus, setmana) do nothing;
+end;
+$$;
+
+comment on function public.comprovar_objectiu_setmanal(uuid) is
+  'Recalcula la suma setmanal de pot_total i registra l''esdeveniment objectiu_setmanal (com a molt un cop per setmana) si s''arriba a objectiu_setmanal. Ús intern, no exposada via RPC.';
+
+revoke all on function public.comprovar_objectiu_setmanal(uuid) from public;
+
+-- =====================================================================
 -- FUNCIÓ: reclamar_activitat
 -- =====================================================================
 -- Únic punt d'entrada per crear una completion. Tota la lògica de
@@ -736,6 +826,7 @@ begin
 
   if v_estat_inicial = 'validada' then
     perform public.processar_punts_validats(v_usuari_id, v_familia_id, v_completion.id);
+    perform public.comprovar_objectiu_setmanal(v_familia_id);
   end if;
 
   return v_completion;
@@ -816,6 +907,8 @@ begin
       v_participant.usuari_id, v_completion.familia_id, v_completion.id
     );
   end loop;
+
+  perform public.comprovar_objectiu_setmanal(v_completion.familia_id);
 
   return v_completion;
 end;
@@ -936,6 +1029,8 @@ begin
       v_participant.usuari_id, v_completion.familia_id, p_completion_id
     );
   end loop;
+
+  perform public.comprovar_objectiu_setmanal(v_completion.familia_id);
 end;
 $$;
 
@@ -1125,6 +1220,7 @@ alter table public.completions enable row level security;
 alter table public.participacions enable row level security;
 alter table public.monedes enable row level security;
 alter table public.ratxes enable row level security;
+alter table public.esdeveniments enable row level security;
 
 -- ---- families -------------------------------------------------------
 -- Només es pot llegir la pròpia família. La creació/edició de families
@@ -1175,6 +1271,14 @@ create policy "completions: veure la família" on public.completions
 -- `anullar_completion` i la validació (fase 2) per `validar_completion`
 -- — totes tres security definer, salten la RLS. El client mai actualitza
 -- `completions` directament.
+
+-- ---- esdeveniments -------------------------------------------------------
+-- Es poden veure els esdeveniments de la pròpia família. No hi ha política
+-- d'INSERT per a `authenticated`: només hi escriu comprovar_objectiu_setmanal.
+create policy "esdeveniments: veure la família" on public.esdeveniments
+  for select
+  to authenticated
+  using (familia_id = public.familia_id_actual());
 
 -- ---- participacions -------------------------------------------------------
 -- Es poden veure les participacions de completions de la pròpia família
