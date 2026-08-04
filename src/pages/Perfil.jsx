@@ -3,11 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { comprimirImatge } from '../lib/fotos'
 import IndicadorsJugador from '../components/IndicadorsJugador'
+import TargetaHistorial from '../components/TargetaHistorial'
 
 const BUCKET_AVATARS = 'avatars'
 // Prou perquè es vegi mentre es té la pantalla oberta; es torna a generar
 // cada vegada que es carrega (veure CLAUDE.md "Fotos").
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
+const MIDA_PAGINA_HISTORIAL = 20
 
 function inicials(nom) {
   if (!nom) return '?'
@@ -28,6 +30,12 @@ export default function Perfil() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [pujantAvatar, setPujantAvatar] = useState(false)
   const [errorAvatar, setErrorAvatar] = useState('')
+
+  const [historial, setHistorial] = useState([])
+  const [carregantHistorial, setCarregantHistorial] = useState(true)
+  const [carregantMes, setCarregantMes] = useState(false)
+  const [errorHistorial, setErrorHistorial] = useState('')
+  const [hiHaMesHistorial, setHiHaMesHistorial] = useState(true)
 
   const carregaCapcalera = useCallback(async () => {
     if (!profile) return
@@ -53,6 +61,42 @@ export default function Perfil() {
   useEffect(() => {
     carregaCapcalera()
   }, [carregaCapcalera])
+
+  // Paginat de 20 en 20 (sense scroll infinit): cada crida demana la
+  // pàgina següent i l'afegeix a la que ja hi ha, en lloc de rellegir-ho tot.
+  const carregaHistorial = useCallback(
+    async (desDeIndex) => {
+      if (!profile) return
+
+      const { data, error } = await supabase
+        .from('completions')
+        .select('id, punts_base_snapshot, estat, created_at, activitats(nom, emoji)')
+        .eq('creada_per', profile.id)
+        .order('created_at', { ascending: false })
+        .range(desDeIndex, desDeIndex + MIDA_PAGINA_HISTORIAL - 1)
+
+      if (error) {
+        setErrorHistorial("No s'ha pogut carregar l'historial. Comprova la connexió.")
+        return
+      }
+
+      setErrorHistorial('')
+      setHistorial((actual) => (desDeIndex === 0 ? data : [...actual, ...data]))
+      setHiHaMesHistorial(data.length === MIDA_PAGINA_HISTORIAL)
+    },
+    [profile],
+  )
+
+  useEffect(() => {
+    setCarregantHistorial(true)
+    carregaHistorial(0).finally(() => setCarregantHistorial(false))
+  }, [carregaHistorial])
+
+  async function handleVeureMes() {
+    setCarregantMes(true)
+    await carregaHistorial(historial.length)
+    setCarregantMes(false)
+  }
 
   async function handleTriaFoto(event) {
     const fitxer = event.target.files?.[0]
@@ -151,6 +195,41 @@ export default function Perfil() {
       {/* TODO fase 4: resum personal generat amb Gemini, es llegirà de la taula
           `resums` un cop existeixi el cron nocturn. De moment, no mostris res
           aquí. */}
+
+      <div>
+        <h2 className="mb-2 font-display text-xs font-medium uppercase tracking-wide text-tinta-sec">
+          El teu historial
+        </h2>
+
+        {carregantHistorial ? (
+          <p className="py-8 text-center text-sm text-tinta-sec">Carregant historial…</p>
+        ) : errorHistorial ? (
+          <p className="text-sm text-calent">{errorHistorial}</p>
+        ) : historial.length === 0 ? (
+          <p className="py-8 text-center text-sm text-tinta-sec">
+            Encara no has fet cap tasca. Ves a Activitats i reclama la primera!
+          </p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {historial.map((completion) => (
+                <TargetaHistorial key={completion.id} completion={completion} />
+              ))}
+            </div>
+
+            {hiHaMesHistorial && (
+              <button
+                type="button"
+                onClick={handleVeureMes}
+                disabled={carregantMes}
+                className="mt-3 w-full rounded-md border border-vora bg-targeta px-4 py-2 text-sm font-medium text-tinta disabled:opacity-50"
+              >
+                {carregantMes ? 'Carregant…' : "Veure'n més"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
