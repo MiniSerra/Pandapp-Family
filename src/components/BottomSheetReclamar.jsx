@@ -24,8 +24,6 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
     }
   }, [previsualitzacio])
 
-  const necessitaFoto = activitat.requereix_foto
-  const potReclamar = !necessitaFoto || imatge !== null
   const enviant = fase !== 'idle'
 
   async function handleFitxer(event) {
@@ -58,7 +56,7 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
     let rutaOriginal = null
     let rutaThumb = null
 
-    if (necessitaFoto) {
+    if (imatge) {
       setFase('pujant')
 
       const carpeta = `${profile.familia_id}/pendent-${crypto.randomUUID()}`
@@ -146,42 +144,40 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
           </div>
         </div>
 
-        {necessitaFoto && (
-          <div className="mb-4">
-            <label
-              htmlFor="foto"
-              className="mb-1 block text-sm font-medium text-tinta-sec"
-            >
-              Foto
-            </label>
-            <input
-              id="foto"
-              type="file"
-              accept="image/*"
-              onChange={handleFitxer}
-              className="block w-full text-sm text-tinta"
-            />
-            {previsualitzacio && (
-              <div className="mt-3 flex items-center gap-3">
-                <img
-                  src={previsualitzacio}
-                  alt=""
-                  className="bisell h-16 w-16 rounded-lg border border-vora object-cover"
-                />
-                {fase === 'comprimint' && (
-                  <span className="text-sm text-tinta-sec">Comprimint…</span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="mb-4">
+          <label
+            htmlFor="foto"
+            className="mb-1 block text-sm font-medium text-tinta-sec"
+          >
+            Afegir foto (opcional)
+          </label>
+          <input
+            id="foto"
+            type="file"
+            accept="image/*"
+            onChange={handleFitxer}
+            className="block w-full text-sm text-tinta"
+          />
+          {previsualitzacio && (
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={previsualitzacio}
+                alt=""
+                className="bisell h-16 w-16 rounded-lg border border-vora object-cover"
+              />
+              {fase === 'comprimint' && (
+                <span className="text-sm text-tinta-sec">Comprimint…</span>
+              )}
+            </div>
+          )}
+        </div>
 
         {error && <p className="mb-3 text-sm text-calent">{error}</p>}
 
         <button
           type="button"
           onClick={handleReclamar}
-          disabled={enviant || !potReclamar}
+          disabled={enviant}
           className="w-full rounded-md bg-panda px-4 py-3 text-base font-medium text-paper disabled:opacity-50"
         >
           {textBoto}

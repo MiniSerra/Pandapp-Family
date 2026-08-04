@@ -125,6 +125,10 @@ create table public.activitats (
 
   -- --- flags de comportament ---
   compartible         boolean not null default false,
+  -- Ja no bloqueja res a reclamar_activitat ni a la interfície: la foto
+  -- sempre és opcional, per a totes les activitats (veure CLAUDE.md
+  -- "Validació de tasques"). Es manté la columna per si es fa servir més
+  -- endavant per suggerir quan convé posar-ne.
   requereix_foto      boolean not null default true,
   es_personal         boolean not null default false,
   es_torn             boolean not null default false,
@@ -635,10 +639,6 @@ begin
     v_punts_calculats := round(v_activitat.punts_base * v_multiplicador)::integer;
   end if;
 
-  if v_activitat.requereix_foto and p_foto_url is null then
-    raise exception 'Aquesta activitat requereix una foto per poder reclamar-la.';
-  end if;
-
   if v_activitat.es_personal then
     select coalesce(sum(p.punts_assignats), 0) into v_punts_personals_avui
     from public.participacions p
@@ -684,7 +684,7 @@ end;
 $$;
 
 comment on function public.reclamar_activitat(uuid, text, text) is
-  'Únic punt d''entrada per reclamar una activitat: comprova cooldown (individual si cooldown_individual o es_personal, compartit altrament) i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció.';
+  'Únic punt d''entrada per reclamar una activitat: comprova cooldown (individual si cooldown_individual o es_personal, compartit altrament), calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció. La foto és sempre opcional (requereix_foto ja no bloqueja res, veure CLAUDE.md "Validació de tasques").';
 
 revoke all on function public.reclamar_activitat(uuid, text, text) from public;
 grant execute on function public.reclamar_activitat(uuid, text, text) to authenticated;

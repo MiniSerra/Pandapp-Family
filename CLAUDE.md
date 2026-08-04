@@ -198,8 +198,13 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 
 ## Validació de tasques
 
-- Foto obligatòria per a les tasques de casa, cuina, bany, roba i Panda.
-- Les **personals no porten foto** i tenen un **límit de 60 punts al dia**.
+- **La foto sempre és opcional, per a totes les activitats** (fase 3): a
+  `reclamar_activitat` no bloqueja mai que no n'hi hagi, i a la interfície
+  el selector de foto ("Afegir foto (opcional)") surt sempre, també a les
+  personals, que abans no en tenien l'opció. `activitats.requereix_foto` es
+  manté a la taula sense fer res — no es fa servir enlloc, es guarda per si
+  algun dia serveix per suggerir quan convé posar-ne.
+- Les **personals** tenen un **límit de 60 punts al dia**.
 - **Validació creuada (backend fet a fase 2):** una `completion` neix
   `'pendent'`, excepte les **personals**, que neixen `'validada'` a l'instant
   (ningú més les pot confirmar). Un altre membre de la família —**mai** qui
@@ -216,6 +221,11 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   tothom) — **excepte si `cooldown_individual = true`** (fase 3), on cada
   usuari té la seva pròpia última completació. Sense el cas general, el
   rànquing queda inservible des del primer dia.
+  **Les activitats `es_personal = true` també fan servir el cooldown
+  individual, encara que `cooldown_individual` quedi a `false`** (fase 3):
+  una activitat personal és individual per definició — que Joel llegeixi no
+  pot bloquejar que Raquel llegeixi. `reclamar_activitat` combina els dos
+  flags amb un OR; `Activitats.jsx` fa el mateix càlcul en client.
 - **Anul·lació:** es pot desfer una reclamació pròpia amb `anullar_completion`
   dins dels primers 15 minuts. Retorna `foto_url`/`thumb_url` perquè el client
   esborri els fitxers del bucket. Si la completion ja estava `'validada'`,
@@ -262,6 +272,10 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 
 ## Fotos
 
+- **Sempre opcional, per a totes les activitats (fase 3).** El selector de
+  foto surt sempre a `BottomSheetReclamar.jsx` com "Afegir foto (opcional)",
+  també a les personals (abans no en tenien l'opció). Veure "Validació de
+  tasques".
 - **Compressió al navegador abans de pujar:** canvas → redimensionar a 1080px →
   WebP qualitat 0.7 (~150 KB), amb fallback a JPEG qualitat 0.8 si el navegador
   no suporta WebP. Miniatura de 300px per al feed, mateix format/qualitat.
