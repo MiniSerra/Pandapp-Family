@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { extreuRutaDesDeUrlSignada } from '../lib/fotos'
 import { anullarCompletion } from '../lib/completions'
 import TargetaFeed from '../components/TargetaFeed'
+import TargetaEsdeveniment from '../components/TargetaEsdeveniment'
 
 const BUCKET = 'fotos-tasques'
 const BUCKET_AVATARS = 'avatars'
@@ -15,6 +16,7 @@ const LIMIT_FEED = 50
 export default function Feed() {
   const { profile } = useAuth()
   const [completions, setCompletions] = useState([])
+  const [esdeveniments, setEsdeveniments] = useState([])
   const [perfils, setPerfils] = useState({})
   const [avatarUrls, setAvatarUrls] = useState({})
   const [fotosUrl, setFotosUrl] = useState({})
@@ -27,7 +29,7 @@ export default function Feed() {
     setCarregant(true)
     setError('')
 
-    const [completionsRes, perfilsRes] = await Promise.all([
+    const [completionsRes, perfilsRes, esdevenimentsRes] = await Promise.all([
       supabase
         .from('completions')
         .select(
@@ -39,6 +41,11 @@ export default function Feed() {
         .order('created_at', { ascending: false })
         .limit(LIMIT_FEED),
       supabase.from('profiles').select('id, nom, avatar_url'),
+      supabase
+        .from('esdeveniments')
+        .select('id, tipus, dades, created_at')
+        .eq('familia_id', profile.familia_id)
+        .order('created_at', { ascending: false }),
     ])
 
     if (completionsRes.error || perfilsRes.error) {
@@ -52,6 +59,7 @@ export default function Feed() {
 
     setPerfils(mapaPerfils)
     setCompletions(completionsRes.data)
+    setEsdeveniments(esdevenimentsRes.data ?? [])
     setCarregant(false)
 
     const ambAvatar = perfilsRes.data.filter((p) => p.avatar_url)
@@ -245,6 +253,16 @@ export default function Feed() {
     if (likeError) aplica(jaLiked)
   }
 
+  // Barreja completions i esdeveniments de sistema en una sola línia de
+  // temps, ordenats per created_at (veure CLAUDE.md "Objectiu col·lectiu").
+  const elements = useMemo(() => {
+    const marcades = [
+      ...completions.map((c) => ({ tipus: 'completion', dataOrdre: c.created_at, item: c })),
+      ...esdeveniments.map((e) => ({ tipus: 'esdeveniment', dataOrdre: e.created_at, item: e })),
+    ]
+    return marcades.sort((a, b) => new Date(b.dataOrdre) - new Date(a.dataOrdre))
+  }, [completions, esdeveniments])
+
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -268,7 +286,7 @@ export default function Feed() {
     )
   }
 
-  if (completions.length === 0) {
+  if (elements.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center gap-2 px-4 py-16 text-center">
         <p className="text-tinta">Encara no hi ha res al feed.</p>
@@ -281,23 +299,27 @@ export default function Feed() {
 
   return (
     <div className="space-y-3 px-4 py-3 pb-8">
-      {completions.map((completion) => (
-        <TargetaFeed
-          key={completion.id}
-          completion={completion}
-          nomAutor={perfils[completion.creada_per] ?? 'algú'}
-          fotoUrl={fotosUrl[completion.id]}
-          jo={profile?.id}
-          perfils={perfils}
-          avatarUrls={avatarUrls}
-          onValidar={handleValidar}
-          onAlternarLike={handleAlternarLike}
-          onAfegeixComentari={handleAfegeixComentari}
-          onAlternarLikeComentari={handleAlternarLikeComentari}
-          onEliminar={handleEliminar}
-          onConfirmarParticipacio={handleConfirmarParticipacio}
-        />
-      ))}
+      {elements.map(({ tipus, item }) =>
+        tipus === 'esdeveniment' ? (
+          <TargetaEsdeveniment key={`esdeveniment-${item.id}`} esdeveniment={item} />
+        ) : (
+          <TargetaFeed
+            key={item.id}
+            completion={item}
+            nomAutor={perfils[item.creada_per] ?? 'algú'}
+            fotoUrl={fotosUrl[item.id]}
+            jo={profile?.id}
+            perfils={perfils}
+            avatarUrls={avatarUrls}
+            onValidar={handleValidar}
+            onAlternarLike={handleAlternarLike}
+            onAfegeixComentari={handleAfegeixComentari}
+            onAlternarLikeComentari={handleAlternarLikeComentari}
+            onEliminar={handleEliminar}
+            onConfirmarParticipacio={handleConfirmarParticipacio}
+          />
+        ),
+      )}
     </div>
   )
 }

@@ -252,6 +252,7 @@ export default function Activitats() {
   const [avatarUrls, setAvatarUrls] = useState({})
   const [ratxa, setRatxa] = useState(null)
   const [monedes, setMonedes] = useState(null)
+  const [familia, setFamilia] = useState(null)
   const [carregant, setCarregant] = useState(true)
   const [error, setError] = useState('')
   const [activitatSeleccionada, setActivitatSeleccionada] = useState(null)
@@ -279,27 +280,33 @@ export default function Activitats() {
       Date.now() - DIES_HISTORIC * 24 * 60 * 60 * 1000,
     ).toISOString()
 
-    const [activitatsRes, completionsRes, perfilsRes, ratxaRes, monedesRes] = await Promise.all([
-      supabase
-        .from('activitats')
-        .select('*')
-        .eq('estat', 'activa')
-        .order('categoria')
-        .order('nom'),
-      supabase
-        .from('completions')
-        .select(
-          'id, activitat_id, creada_per, created_at, estat, participacions(usuari_id, punts_assignats, confirmat)',
-        )
-        .eq('familia_id', profile.familia_id)
-        .gte('created_at', desDe)
-        .order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, nom, avatar_url'),
-      // ratxes/monedes encara poden no tenir fila (es creen soles la
-      // primera vegada que es completa el llindar diari).
-      supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
-      supabase.from('monedes').select('saldo').eq('usuari_id', profile.id).maybeSingle(),
-    ])
+    const [activitatsRes, completionsRes, perfilsRes, ratxaRes, monedesRes, familiaRes] =
+      await Promise.all([
+        supabase
+          .from('activitats')
+          .select('*')
+          .eq('estat', 'activa')
+          .order('categoria')
+          .order('nom'),
+        supabase
+          .from('completions')
+          .select(
+            'id, activitat_id, creada_per, created_at, estat, pot_total, participacions(usuari_id, punts_assignats, confirmat)',
+          )
+          .eq('familia_id', profile.familia_id)
+          .gte('created_at', desDe)
+          .order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, nom, avatar_url'),
+        // ratxes/monedes encara poden no tenir fila (es creen soles la
+        // primera vegada que es completa el llindar diari).
+        supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
+        supabase.from('monedes').select('saldo').eq('usuari_id', profile.id).maybeSingle(),
+        supabase
+          .from('families')
+          .select('objectiu_setmanal, premi_setmanal')
+          .eq('id', profile.familia_id)
+          .single(),
+      ])
 
     if (activitatsRes.error || completionsRes.error || perfilsRes.error) {
       setError("No s'ha pogut carregar el catàleg. Comprova la connexió.")
@@ -316,6 +323,7 @@ export default function Activitats() {
     setMembresFamilia(perfilsRes.data.filter((p) => p.id !== profile.id))
     setRatxa(ratxaRes.data ?? { dies_seguits: 0 })
     setMonedes(monedesRes.data ?? { saldo: 0 })
+    setFamilia(familiaRes.data ?? null)
     setCarregant(false)
 
     const ambAvatar = perfilsRes.data.filter((p) => p.avatar_url)
@@ -403,6 +411,17 @@ export default function Activitats() {
       .reduce((suma, p) => suma + p.punts_assignats, 0)
   }, [completions, profile])
 
+  // Objectiu col·lectiu (fase 3, veure CLAUDE.md "Objectiu col·lectiu"):
+  // suma el POT SENCER de cada completion validada de tota la família des
+  // de l'inici de la setmana local, no la part de cadascú — coincideix
+  // amb el mateix càlcul que fa comprovar_objectiu_setmanal al servidor.
+  const sumaSetmanal = useMemo(() => {
+    const iniciSetmana = iniciPeriodeLocal('week')
+    return completions
+      .filter((c) => c.estat === 'validada' && new Date(c.created_at) >= iniciSetmana)
+      .reduce((suma, c) => suma + c.pot_total, 0)
+  }, [completions])
+
   async function gestionaExit(activitatId) {
     setActivitatSeleccionada(null)
     setFlaixId(activitatId)
@@ -436,15 +455,41 @@ export default function Activitats() {
   }
 
   const llindar = profile?.llindar_diari ?? 100
+  const objectiuSetmanal = familia?.objectiu_setmanal ?? 0
+  const objectiuAssolit = objectiuSetmanal > 0 && sumaSetmanal >= objectiuSetmanal
+  const percentSetmanal = objectiuSetmanal > 0 ? Math.min(1, sumaSetmanal / objectiuSetmanal) : 0
 
   return (
     <div className="pb-8">
-      <div className="flex items-center justify-center gap-4 border-b border-vora bg-targeta px-4 py-6">
-        <AnellProgres punts={puntsAvui} llindar={llindar} />
-        <IndicadorsJugador
-          diesSeguits={ratxa?.dies_seguits ?? 0}
-          saldoMonedes={monedes?.saldo ?? 0}
-        />
+      <div className="border-b border-vora bg-targeta px-4 py-6">
+        <div className="flex items-center justify-center gap-4">
+          <AnellProgres punts={puntsAvui} llindar={llindar} />
+          <IndicadorsJugador
+            diesSeguits={ratxa?.dies_seguits ?? 0}
+            saldoMonedes={monedes?.saldo ?? 0}
+          />
+        </div>
+
+        {familia && (
+          <div className="mt-4">
+            <div className="bisell h-2.5 w-full overflow-hidden rounded-full border border-vora bg-paper">
+              <div
+                className="h-full rounded-full bg-panda transition-[width] duration-500 ease-out"
+                style={{ width: `${percentSetmanal * 100}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-center font-display text-xs font-medium text-tinta">
+              {objectiuAssolit
+                ? 'Objectiu assolit! 🎉'
+                : `Família: ${sumaSetmanal} / ${objectiuSetmanal}`}
+            </p>
+            {familia.premi_setmanal && (
+              <p className="text-center font-body text-xs text-tinta-sec">
+                Premi: {familia.premi_setmanal}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <BarraCercaIVista cerca={cerca} onCerca={setCerca} vista={vista} onVista={setVista} />
