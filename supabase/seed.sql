@@ -323,3 +323,14 @@ cross join (values
   compartible, requereix_foto, es_personal, es_torn
 )
 where f.nom = 'Serrano';
+
+-- =====================================================================
+-- Cooldown personal (fase 3)
+-- =====================================================================
+-- Cadascú té el seu propi llit i la seva pròpia habitació: que algú altre
+-- de la família faci la seva no hauria de bloquejar-me la meva ni fer que
+-- els meus punts deixin d'escalar (veure schema.sql, columna
+-- activitats.cooldown_individual i la funció reclamar_activitat).
+update public.activitats
+set cooldown_individual = true
+where nom in ('Fer el llit', 'Escombrar o aspirar una estança', 'Ordenar la teva habitació');

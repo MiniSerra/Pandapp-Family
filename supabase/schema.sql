@@ -82,6 +82,9 @@ create index idx_profiles_familia on public.profiles (familia_id);
 -- tots els flags es creen des de la fase 1 encara que alguns (k_dia,
 -- sostre, es_torn, el flux de proposta/votació) no s'utilitzin fins a
 -- fases posteriors — així s'evita haver d'alterar la taula més endavant.
+-- `cooldown_individual` (fase 3): per a tasques on cadascú té el seu
+-- propi "exemplar" (el llit, l'habitació pròpia) i que una altra persona
+-- la faci no hauria de bloquejar-la ni desescalar-la per a mi.
 create table public.activitats (
   id                  uuid primary key default gen_random_uuid(),
   familia_id          uuid not null references public.families (id) on delete cascade,
@@ -97,9 +100,18 @@ create table public.activitats (
 
   -- --- paràmetres de punts (veure "Sistema de punts" a CLAUDE.md) ---
   punts_base          integer not null check (punts_base > 0),
-  -- hores durant les quals la tasca queda bloquejada per a tothom
-  -- després de reclamar-se (comprovat dins de reclamar_activitat).
+  -- hores durant les quals la tasca queda bloquejada després de
+  -- reclamar-se (comprovat dins de reclamar_activitat). Per a qui queda
+  -- bloquejada depèn de `cooldown_individual`.
   cooldown_h          numeric not null default 0 check (cooldown_h >= 0),
+  -- false (per defecte): el cooldown és de la tasca, no de la persona —
+  -- si algú neteja el sorral, queda bloquejada per a tothom (recurs
+  -- compartit). true: cada usuari té el seu propi cooldown i la seva
+  -- pròpia escalada per oblit, independents dels altres — per a tasques
+  -- on cadascú té el seu propi "exemplar" (el llit, l'habitació...) i que
+  -- una altra persona faci la seva no hauria de bloquejar ni desescalar
+  -- la meva.
+  cooldown_individual boolean not null default false,
   -- hores dins de les quals es paga punts_base sense escalada.
   periode_normal_h    numeric not null default 24 check (periode_normal_h >= 0),
   -- % de pujada per dia passat el període normal (fase 2).
@@ -583,9 +595,19 @@ begin
     raise exception 'Aquesta activitat no està activa i no es pot reclamar.';
   end if;
 
-  select max(created_at) into v_ultima_completion
-  from public.completions
-  where activitat_id = p_activitat_id;
+  -- cooldown_individual: cada usuari té el seu propi cooldown (i, per
+  -- tant, la seva pròpia escalada per oblit, que reutilitza aquest mateix
+  -- v_ultima_completion més avall) en lloc de bloquejar-se per a tothom.
+  if v_activitat.cooldown_individual then
+    select max(created_at) into v_ultima_completion
+    from public.completions
+    where activitat_id = p_activitat_id
+      and creada_per = v_usuari_id;
+  else
+    select max(created_at) into v_ultima_completion
+    from public.completions
+    where activitat_id = p_activitat_id;
+  end if;
 
   if v_ultima_completion is not null
      and v_ultima_completion > now() - (v_activitat.cooldown_h * interval '1 hour') then
@@ -656,7 +678,7 @@ end;
 $$;
 
 comment on function public.reclamar_activitat(uuid, text, text) is
-  'Únic punt d''entrada per reclamar una activitat: comprova cooldown i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció.';
+  'Únic punt d''entrada per reclamar una activitat: comprova cooldown (personal o compartit segons cooldown_individual) i foto obligatòria, calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció.';
 
 revoke all on function public.reclamar_activitat(uuid, text, text) from public;
 grant execute on function public.reclamar_activitat(uuid, text, text) to authenticated;

@@ -68,6 +68,14 @@ Cada activitat del catàleg té cinc números que en defineixen el comportament:
 El cooldown i l'escalada són **de la tasca, no de la persona**: si algú neteja el
 sorral, queda bloquejat per a tothom.
 
+**Excepció — `cooldown_individual` (fase 3):** per a tasques on cadascú té el
+seu propi "exemplar" (el llit, l'habitació pròpia), aquest principi es giraria
+en contra: que algú faci la seva no hauria de bloquejar ni desescalar la dels
+altres. Amb aquest flag a `true`, el cooldown i l'escalada passen a ser propis
+de cada usuari. Activades de moment a **Fer el llit**, **Escombrar o aspirar
+una estança** i **Ordenar la teva habitació** (`supabase/seed.sql`). Per
+defecte `false` (comportament de sempre).
+
 ### Escalada per oblit
 
 Passat `periode_normal_h`, els punts creixen de manera contínua per dia:
@@ -205,7 +213,9 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 - **Cooldown per tasca (fase 1):** en reclamar, es mira l'última completació
   d'aquella activitat i es bloqueja si no han passat `cooldown_h`. És per
   activitat, no per usuari (si algú neteja el sorral, queda bloquejat per a
-  tothom). Sense això el rànquing queda inservible des del primer dia.
+  tothom) — **excepte si `cooldown_individual = true`** (fase 3), on cada
+  usuari té la seva pròpia última completació. Sense el cas general, el
+  rànquing queda inservible des del primer dia.
 - **Anul·lació:** es pot desfer una reclamació pròpia amb `anullar_completion`
   dins dels primers 15 minuts. Retorna `foto_url`/`thumb_url` perquè el client
   esborri els fitxers del bucket.
@@ -320,8 +330,8 @@ ja ho diu amb números freds, que és molt més fàcil de païr.
 families            id, nom, llindar_diari_defecte, objectiu_setmanal
 profiles            id (=auth.uid), familia_id, nom, avatar_url, llindar_diari
 activitats          id, familia_id, categoria, nom, emoji, descripcio,
-                    punts_base, cooldown_h, periode_normal_h, k_dia, sostre,
-                    compartible, requereix_foto, es_personal, es_torn,
+                    punts_base, cooldown_h, cooldown_individual, periode_normal_h,
+                    k_dia, sostre, compartible, requereix_foto, es_personal, es_torn,
                     estat (proposta|activa|retirada), versio, proposada_per,
                     activa_des_de
 completions         id, activitat_id, familia_id, creada_per, versio_punts,
