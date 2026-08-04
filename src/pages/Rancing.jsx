@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { PERIODES_RANQUING, calculaClassificacions } from '../lib/ranquing'
+import PerfilMembre from '../components/PerfilMembre'
 
 // Marge de seguretat perquè el rànquing mensual sempre inclogui tot el mes
 // en curs (fins a 31 dies), calculat després en client amb iniciPeriodeLocal.
@@ -38,12 +39,14 @@ function PestanyesPeriode({ actiu, onCanvia }) {
   )
 }
 
-function FilaClassificacio({ posicio, nom, punts, soc }) {
+function FilaClassificacio({ posicio, nom, punts, soc, onSeleccionar }) {
   const esPrimer = posicio === 1
 
   return (
-    <div
-      className={`bisell flex items-center gap-3 rounded-2xl border border-vora bg-targeta px-4 ${
+    <button
+      type="button"
+      onClick={onSeleccionar}
+      className={`bisell flex w-full items-center gap-3 rounded-2xl border border-vora bg-targeta px-4 text-left transition-colors hover:bg-vora/40 ${
         esPrimer ? 'border-t-2 border-t-panda py-4' : 'py-3'
       }`}
     >
@@ -56,7 +59,7 @@ function FilaClassificacio({ posicio, nom, punts, soc }) {
       >
         {punts}
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -67,6 +70,7 @@ export default function Rancing() {
   const [carregant, setCarregant] = useState(true)
   const [error, setError] = useState('')
   const [periode, setPeriode] = useState('diari')
+  const [membreSeleccionat, setMembreSeleccionat] = useState(null)
 
   const carregar = useCallback(async () => {
     if (!profile) return
@@ -144,9 +148,17 @@ export default function Rancing() {
             nom={membre.nom}
             punts={membre.punts}
             soc={membre.id === profile?.id}
+            onSeleccionar={() => setMembreSeleccionat(membre.id)}
           />
         ))}
       </div>
+
+      {membreSeleccionat && (
+        <PerfilMembre
+          usuariId={membreSeleccionat}
+          onTancar={() => setMembreSeleccionat(null)}
+        />
+      )}
     </div>
   )
 }

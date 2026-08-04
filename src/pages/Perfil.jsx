@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { comprimirImatge } from '../lib/fotos'
+import { inicials } from '../lib/text'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 import TargetaHistorial from '../components/TargetaHistorial'
 
@@ -10,16 +11,6 @@ const BUCKET_AVATARS = 'avatars'
 // cada vegada que es carrega (veure CLAUDE.md "Fotos").
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
 const MIDA_PAGINA_HISTORIAL = 20
-
-function inicials(nom) {
-  if (!nom) return '?'
-  return nom
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('')
-}
 
 export default function Perfil() {
   const { profile } = useAuth()
