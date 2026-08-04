@@ -317,13 +317,16 @@ export default function Activitats() {
     carregar()
   }, [carregar])
 
-  // cooldown_individual (fase 3): per a activitats com "Fer el llit", on
-  // cadascú té el seu propi exemplar, l'última completació "que compta"
-  // per bloquejar/escalar només és la meva pròpia, no la de qualsevol
-  // membre de la família — mateix criteri que reclamar_activitat al servidor.
+  // cooldown_individual O es_personal (fase 3): per a activitats com "Fer
+  // el llit" (exemplar propi) o qualsevol activitat personal (llegir,
+  // meditar...), l'última completació "que compta" per bloquejar/escalar
+  // només és la meva pròpia, no la de qualsevol membre de la família —
+  // mateix criteri que reclamar_activitat al servidor.
   const ultimaPerActivitat = useMemo(() => {
     const individuals = new Set(
-      activitats.filter((act) => act.cooldown_individual).map((act) => act.id),
+      activitats
+        .filter((act) => act.cooldown_individual || act.es_personal)
+        .map((act) => act.id),
     )
     const mapa = {}
     for (const c of completions) {
