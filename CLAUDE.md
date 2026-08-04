@@ -146,7 +146,38 @@ Sense la segona moneda l'app és només una taula de rècords i s'esgota.
 - Si s'assoleix, **premi real per a tothom**. El guanyador individual no s'emporta
   el premi: és de tots o de ningú.
 - L'estat del Panda pot **bloquejar el premi**: si el sorral porta més de 2 dies
-  brut, no hi ha premi encara que s'hagin fet els punts.
+  brut, no hi ha premi encara que s'hagin fet els punts. *(Pendent: encara no hi
+  ha estat del Panda — veure "Fases".)*
+
+**Implementat a fase 3, sense pestanya pròpia — viu en dos llocs:**
+- **`families.objectiu_setmanal`** (ja existia, per defecte 1650) i
+  **`families.premi_setmanal`** (text lliure, p. ex. "Pizza tots junts
+  divendres"; `null` si no se n'ha configurat cap). Editables només via SQL
+  Editor de moment, no hi ha interfície per canviar-los.
+- **Càlcul:** suma del **`pot_total`** (mai `punts_assignats` individuals —
+  "el pot sencer, no la part de cadascú") de totes les `completions`
+  `estat = 'validada'` de la família des de l'inici de la setmana local
+  (dilluns, Europe/Madrid, via `inici_periode_local('week')`). Recalculat
+  tant al servidor (`comprovar_objectiu_setmanal`) com en client
+  (`Activitats.jsx`, mateixa fórmula).
+- **Capçalera d'Activitats:** sota l'anell de progrés personal i els
+  indicadors de 🔥/🪙, una barra fina amb bisell metàl·lic que s'omple amb
+  `--panda` i el text "Família: {suma} / {objectiu}" (o "Objectiu assolit!
+  🎉" si ja s'ha superat), i "Premi: {premi_setmanal}" a sota si n'hi ha un.
+- **Esdeveniment al feed:** quan la suma arriba a l'objectiu per primera
+  vegada aquella setmana, `comprovar_objectiu_setmanal` (cridada des de
+  `reclamar_activitat` quan neix ja validada, `validar_completion` i
+  `confirmar_participacio` quan es valida sola — sempre que una completion
+  passa a `'validada'`) insereix una fila a la taula `esdeveniments`
+  (`tipus = 'objectiu_setmanal'`, `dades` amb `suma`/`objectiu`/`premi`).
+  La `unique (familia_id, tipus, setmana)` és el que garanteix que només
+  es crea un cop per setmana: `insert ... on conflict do nothing` és atòmic
+  a nivell de base de dades, sense la finestra de carrera que tindria una
+  comprovació prèvia amb un `select` normal si dues validacions arriben
+  gairebé alhora. `Feed.jsx` barreja `completions` i `esdeveniments` en una
+  sola línia de temps ordenada per `created_at`; `TargetaEsdeveniment.jsx`
+  el pinta diferent de les targetes normals (sense foto, avatars, like ni
+  comentaris).
 
 ---
 
@@ -421,7 +452,8 @@ ja ho diu amb números freds, que és molt més fàcil de païr.
 ## Model de dades (esborrany)
 
 ```
-families            id, nom, llindar_diari_defecte, objectiu_setmanal
+families            id, nom, llindar_diari_defecte, objectiu_setmanal,
+                    premi_setmanal
 profiles            id (=auth.uid), familia_id, nom, avatar_url, llindar_diari
 activitats          id, familia_id, categoria, nom, emoji, descripcio,
                     punts_base, cooldown_h, cooldown_individual, periode_normal_h,
@@ -446,6 +478,8 @@ ratxes              usuari_id, dies_seguits, ultim_dia_complert (date local),
 recompenses         id, familia_id, nom, cost
 bescanvis           recompensa_id, usuari_id, created_at
 resums              id, familia_id, usuari_id (null = familiar), periode, text
+esdeveniments       id, familia_id, tipus, setmana (date local), dades (jsonb),
+                    created_at
 ```
 
 **Important:** els punts van a `participacions`, no a `completions`. Si es fa al
@@ -654,10 +688,19 @@ d'una categoria concreta).
    la capçalera d'Activitats). Pestanya **Perfil feta**: avatar (bucket
    `avatars`), historial paginat de les pròpies completions, i des del
    rànquing es pot veure el perfil (de només lectura) de qualsevol membre
-   (`PerfilMembre.jsx`). Cooldown personal (`cooldown_individual`) per a
-   tasques amb exemplar propi (fer el llit, etc.). Comentaris al feed, amb
-   respostes i like. **Pendent:** recompenses, tasques compartides, estat
-   del Panda.
-4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
+   (`PerfilMembre.jsx`). Cooldown personal (`cooldown_individual`, i
+   sempre per a `es_personal`) per a tasques amb exemplar propi (fer el
+   llit, etc.). Comentaris al feed, amb respostes i like. **Tasques
+   compartides fetes** (etiquetar participants, multiplicador de grup,
+   confirmació, validació automàtica quan cobreixen tota la família —
+   veure "Tasques compartides"). **Objectiu col·lectiu setmanal fet**
+   (capçalera d'Activitats + esdeveniment al feed, veure "Objectiu
+   col·lectiu"). **Pendent:** recompenses, estat del Panda.
+4. **Fase 4 (en curs):** notificacions push **fetes en part** — infraestructura
+   (Web Push, VAPID, `subscripcions_push`, edge function `enviar-push`) i la
+   notificació d'algú fent una activitat, veure "Notificacions push".
+   **Pendent** dins de push: comentari nou, rival del dia, recordatori
+   diari. **Pendent** de la resta de fase 4: propostes i votacions, resums
+   amb Gemini.
 
 **No implementis res de fases posteriors sense que s'hagi demanat explícitament.**
