@@ -245,6 +245,7 @@ export default function Activitats() {
   const [activitats, setActivitats] = useState([])
   const [completions, setCompletions] = useState([])
   const [perfils, setPerfils] = useState({})
+  const [membresFamilia, setMembresFamilia] = useState([])
   const [ratxa, setRatxa] = useState(null)
   const [monedes, setMonedes] = useState(null)
   const [carregant, setCarregant] = useState(true)
@@ -284,7 +285,7 @@ export default function Activitats() {
       supabase
         .from('completions')
         .select(
-          'id, activitat_id, creada_per, created_at, estat, participacions(usuari_id, punts_assignats)',
+          'id, activitat_id, creada_per, created_at, estat, participacions(usuari_id, punts_assignats, confirmat)',
         )
         .eq('familia_id', profile.familia_id)
         .gte('created_at', desDe)
@@ -308,6 +309,7 @@ export default function Activitats() {
     setActivitats(activitatsRes.data)
     setCompletions(completionsRes.data)
     setPerfils(mapaPerfils)
+    setMembresFamilia(perfilsRes.data.filter((p) => p.id !== profile.id))
     setRatxa(ratxaRes.data ?? { dies_seguits: 0 })
     setMonedes(monedesRes.data ?? { saldo: 0 })
     setCarregant(false)
@@ -374,14 +376,15 @@ export default function Activitats() {
   }, [activitatsFiltrades, categoriaActiva, categories])
 
   // Fase 2: una completion 'pendent' (validació creuada) encara no compta
-  // al progrés del dia, encara que ja s'hagi reclamat.
+  // al progrés del dia, encara que ja s'hagi reclamat. Fase 3: en una
+  // tasca compartida, tampoc compta si encara no he confirmat "hi era".
   const puntsAvui = useMemo(() => {
     if (!profile) return 0
     const iniciAvui = iniciPeriodeLocal('day')
     return completions
       .filter((c) => c.estat === 'validada' && new Date(c.created_at) >= iniciAvui)
       .flatMap((c) => c.participacions ?? [])
-      .filter((p) => p.usuari_id === profile.id)
+      .filter((p) => p.usuari_id === profile.id && p.confirmat)
       .reduce((suma, p) => suma + p.punts_assignats, 0)
   }, [completions, profile])
 
@@ -477,6 +480,7 @@ export default function Activitats() {
       {activitatSeleccionada && (
         <BottomSheetReclamar
           activitat={activitatSeleccionada}
+          membresFamilia={membresFamilia}
           onTancar={() => setActivitatSeleccionada(null)}
           onExit={gestionaExit}
         />

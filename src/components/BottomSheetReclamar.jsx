@@ -10,13 +10,15 @@ const BUCKET = 'fotos-tasques'
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
 const ERROR_CONNEXIO = 'Error de connexió. Torna-ho a provar.'
 
-export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
+export default function BottomSheetReclamar({ activitat, membresFamilia, onTancar, onExit }) {
   const { profile } = useAuth()
   // 'idle' | 'comprimint' | 'pujant'
   const [fase, setFase] = useState('idle')
   const [error, setError] = useState('')
   const [imatge, setImatge] = useState(null)
   const [previsualitzacio, setPrevisualitzacio] = useState(null)
+  const [compartida, setCompartida] = useState(false)
+  const [participantsSeleccionats, setParticipantsSeleccionats] = useState([])
 
   useEffect(() => {
     return () => {
@@ -25,6 +27,12 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
   }, [previsualitzacio])
 
   const enviant = fase !== 'idle'
+
+  function handleAlternarParticipant(id) {
+    setParticipantsSeleccionats((actual) =>
+      actual.includes(id) ? actual.filter((p) => p !== id) : [...actual, id],
+    )
+  }
 
   async function handleFitxer(event) {
     const fitxer = event.target.files?.[0]
@@ -104,6 +112,9 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
       p_activitat_id: activitat.id,
       p_foto_url: fotoUrl,
       p_thumb_url: thumbUrl,
+      p_participants_ids: compartida && participantsSeleccionats.length > 0
+        ? participantsSeleccionats
+        : null,
     })
 
     if (rpcError) {
@@ -171,6 +182,56 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
             </div>
           )}
         </div>
+
+        {activitat.compartible && membresFamilia?.length > 0 && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setCompartida((actual) => !actual)
+                setParticipantsSeleccionats([])
+              }}
+              className="flex w-full items-center justify-between"
+            >
+              <span className="text-sm font-medium text-tinta-sec">Activitat compartida</span>
+              <span
+                className={`relative h-6 w-11 rounded-full transition-colors ${
+                  compartida ? 'bg-panda' : 'bg-vora'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper transition-transform ${
+                    compartida ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+
+            {compartida && (
+              <div className="mt-3 space-y-2">
+                <p className="font-body text-xs text-tinta-sec">Qui més hi era?</p>
+                {membresFamilia.map((membre) => {
+                  const seleccionat = participantsSeleccionats.includes(membre.id)
+                  return (
+                    <button
+                      key={membre.id}
+                      type="button"
+                      onClick={() => handleAlternarParticipant(membre.id)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left font-body text-sm ${
+                        seleccionat
+                          ? 'border-panda bg-panda/10 text-tinta'
+                          : 'border-vora bg-targeta text-tinta-sec'
+                      }`}
+                    >
+                      {membre.nom}
+                      {seleccionat && <span className="text-panda">✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {error && <p className="mb-3 text-sm text-calent">{error}</p>}
 
