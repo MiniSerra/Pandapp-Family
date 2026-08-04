@@ -5,6 +5,7 @@ import { extreuRutaDesDeUrlSignada } from '../lib/fotos'
 import TargetaFeed from '../components/TargetaFeed'
 
 const BUCKET = 'fotos-tasques'
+const BUCKET_AVATARS = 'avatars'
 // Prou perquè es vegi mentre es té el feed obert; es torna a generar cada
 // vegada que es carrega la pantalla (veure CLAUDE.md "Fotos").
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
@@ -14,6 +15,7 @@ export default function Feed() {
   const { profile } = useAuth()
   const [completions, setCompletions] = useState([])
   const [perfils, setPerfils] = useState({})
+  const [avatarUrls, setAvatarUrls] = useState({})
   const [fotosUrl, setFotosUrl] = useState({})
   const [carregant, setCarregant] = useState(true)
   const [error, setError] = useState('')
@@ -29,12 +31,13 @@ export default function Feed() {
         .from('completions')
         .select(
           'id, activitat_id, creada_per, punts_base_snapshot, estat, foto_url, created_at, ' +
-            'activitats(nom, emoji), participacions(usuari_id, punts_assignats), likes(usuari_id)',
+            'activitats(nom, emoji), participacions(usuari_id, punts_assignats), likes(usuari_id), ' +
+            'comentaris(id, usuari_id, resposta_a, text, created_at, comentari_likes(usuari_id))',
         )
         .eq('familia_id', profile.familia_id)
         .order('created_at', { ascending: false })
         .limit(LIMIT_FEED),
-      supabase.from('profiles').select('id, nom'),
+      supabase.from('profiles').select('id, nom, avatar_url'),
     ])
 
     if (completionsRes.error || perfilsRes.error) {
@@ -49,6 +52,17 @@ export default function Feed() {
     setPerfils(mapaPerfils)
     setCompletions(completionsRes.data)
     setCarregant(false)
+
+    const ambAvatar = perfilsRes.data.filter((p) => p.avatar_url)
+    const entradesAvatars = await Promise.all(
+      ambAvatar.map(async (p) => {
+        const { data } = await supabase.storage
+          .from(BUCKET_AVATARS)
+          .createSignedUrl(p.avatar_url, CADUCITAT_URL_SIGNADA_S)
+        return [p.id, data?.signedUrl ?? null]
+      }),
+    )
+    setAvatarUrls(Object.fromEntries(entradesAvatars))
 
     const ambFoto = completionsRes.data.filter((c) => c.foto_url)
     const entrades = await Promise.all(
@@ -136,6 +150,74 @@ export default function Feed() {
     }
   }
 
+  // Afegeix un comentari (o una resposta, si respostaA no és null) i
+  // l'insereix en local sense recarregar tot el feed.
+  async function handleAfegeixComentari(completionId, text, respostaA) {
+    if (!profile) return 'sense-perfil'
+
+    const { data, error: comentariError } = await supabase
+      .from('comentaris')
+      .insert({
+        completion_id: completionId,
+        usuari_id: profile.id,
+        text,
+        resposta_a: respostaA,
+      })
+      .select('id, usuari_id, resposta_a, text, created_at')
+      .single()
+
+    if (comentariError) return comentariError
+
+    actualitzaCompletion(completionId, (c) => ({
+      ...c,
+      comentaris: [...(c.comentaris ?? []), { ...data, comentari_likes: [] }],
+    }))
+
+    return null
+  }
+
+  // Mateix patró d'actualització optimista que els likes d'una completion.
+  async function handleAlternarLikeComentari(completionId, comentariId) {
+    if (!profile) return
+
+    const completion = completions.find((c) => c.id === completionId)
+    const comentari = completion?.comentaris?.find((co) => co.id === comentariId)
+    const jaLiked = (comentari?.comentari_likes ?? []).some(
+      (like) => like.usuari_id === profile.id,
+    )
+
+    function aplica(afegeix) {
+      actualitzaCompletion(completionId, (c) => ({
+        ...c,
+        comentaris: c.comentaris.map((co) =>
+          co.id !== comentariId
+            ? co
+            : {
+                ...co,
+                comentari_likes: afegeix
+                  ? [...co.comentari_likes, { usuari_id: profile.id }]
+                  : co.comentari_likes.filter((like) => like.usuari_id !== profile.id),
+              },
+        ),
+      }))
+    }
+
+    aplica(!jaLiked)
+
+    const { error: likeError } = jaLiked
+      ? await supabase
+          .from('comentari_likes')
+          .delete()
+          .eq('comentari_id', comentariId)
+          .eq('usuari_id', profile.id)
+      : await supabase.from('comentari_likes').insert({
+          comentari_id: comentariId,
+          usuari_id: profile.id,
+        })
+
+    if (likeError) aplica(jaLiked)
+  }
+
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -179,8 +261,12 @@ export default function Feed() {
           nomAutor={perfils[completion.creada_per] ?? 'algú'}
           fotoUrl={fotosUrl[completion.id]}
           jo={profile?.id}
+          perfils={perfils}
+          avatarUrls={avatarUrls}
           onValidar={handleValidar}
           onAlternarLike={handleAlternarLike}
+          onAfegeixComentari={handleAfegeixComentari}
+          onAlternarLikeComentari={handleAlternarLikeComentari}
         />
       ))}
     </div>

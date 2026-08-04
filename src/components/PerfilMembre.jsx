@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { inicials } from '../lib/text'
 import IndicadorsJugador from './IndicadorsJugador'
 import TargetaHistorial from './TargetaHistorial'
+import AvatarUsuari from './AvatarUsuari'
 
 const BUCKET_AVATARS = 'avatars'
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
@@ -116,15 +116,7 @@ export default function PerfilMembre({ usuariId, onTancar }) {
         ) : (
           <>
             <div className="flex flex-col items-center gap-3 text-center">
-              <div className="bisell relative h-24 w-24 overflow-hidden rounded-full border border-vora bg-targeta">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center font-display text-2xl font-bold text-tinta">
-                    {inicials(perfil.nom)}
-                  </span>
-                )}
-              </div>
+              <AvatarUsuari url={avatarUrl} nom={perfil.nom} mida="lg" />
 
               <h1 className="font-display text-2xl font-bold text-tinta">{perfil.nom}</h1>
 

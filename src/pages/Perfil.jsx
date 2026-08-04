@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { comprimirImatge } from '../lib/fotos'
-import { inicials } from '../lib/text'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 import TargetaHistorial from '../components/TargetaHistorial'
+import AvatarUsuari from '../components/AvatarUsuari'
 
 const BUCKET_AVATARS = 'avatars'
 // Prou perquè es vegi mentre es té la pantalla oberta; es torna a generar
@@ -149,17 +149,11 @@ export default function Perfil() {
           onClick={() => fitxerInputRef.current?.click()}
           disabled={pujantAvatar}
           aria-label="Canviar foto de perfil"
-          className="bisell relative h-24 w-24 overflow-hidden rounded-full border border-vora bg-targeta disabled:opacity-50"
+          className="relative disabled:opacity-50"
         >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center font-display text-2xl font-bold text-tinta">
-              {inicials(profile.nom)}
-            </span>
-          )}
+          <AvatarUsuari url={avatarUrl} nom={profile.nom} mida="lg" />
           {pujantAvatar && (
-            <span className="absolute inset-0 flex items-center justify-center bg-paper/70 font-body text-xs text-tinta">
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-paper/70 font-body text-xs text-tinta">
               Pujant…
             </span>
           )}
