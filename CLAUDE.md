@@ -230,6 +230,14 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   comptador d'"aplaudiments rebuts" al perfil.
 - Els esdeveniments del sistema també hi surten: activitats noves aprovades,
   objectiu setmanal assolit, fites de ratxa.
+- **Comentaris (fase 3):** cada entrada del feed té el seu fil de comentaris,
+  amb respostes (**un sol nivell**: respondre una resposta l'enganxa igualment
+  al mateix fil) i like propi per comentari. Com els likes, no donen punts ni
+  passen per cap funció `security definer` — el client escriu directament a
+  `comentaris`/`comentari_likes` amb RLS normal. Implementat a
+  `SeccioComentaris.jsx` (`src/pages/Feed.jsx` en carrega els comentaris niats
+  dins de la mateixa consulta de `completions`, i les URLs signades dels
+  avatars de tota la família en bloc).
 
 ---
 
@@ -239,6 +247,11 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   WebP qualitat 0.7 (~150 KB), amb fallback a JPEG qualitat 0.8 si el navegador
   no suporta WebP. Miniatura de 300px per al feed, mateix format/qualitat.
   Implementat a `src/lib/fotos.js` (`comprimirImatge`).
+- **Selector de fitxer sense `capture`:** els inputs de foto (reclamar tasca,
+  canviar avatar) són `<input type="file" accept="image/*">` sense l'atribut
+  `capture`. Amb `capture="environment"`/`"user"` el mòbil obria la càmera
+  directament i no deixava triar una foto ja feta de la galeria; sense
+  `capture`, el selector natiu ofereix totes dues opcions.
 - **Bucket privat `fotos-tasques`.** Esquema de ruta:
   `{familia_id}/{identificador}/original.<ext>` i
   `{familia_id}/{identificador}/thumb.<ext>` (`<ext>` és `webp` o, en fallback,
@@ -340,6 +353,9 @@ completions         id, activitat_id, familia_id, creada_per, versio_punts,
 participacions      completion_id, usuari_id, punts_assignats, confirmat,
                     es_qui_puja
 likes               completion_id, usuari_id, created_at
+comentaris          id, completion_id, usuari_id, resposta_a (null = arrel),
+                    text, created_at
+comentari_likes     comentari_id, usuari_id, created_at
 propostes           id, tipus, activitat_id, payload, proposada_per, estat, caduca
 vots                proposta_id, usuari_id, vot, punts_suggerits, created_at
 torns               activitat_id, usuari_id, setmana
@@ -369,11 +385,13 @@ catàleg ni es pugui reclamar a mà).
 perquè les polítiques de RLS i les consultes de feed/rànquing no calgui que facin
 `JOIN` a `activitats` per saber de qui o de quina família és cada fila.
 
-**Important:** `likes` és l'única taula (a banda de les de fases futures) on el
-client escriu directament amb polítiques RLS normals, sense passar per cap
-funció `security definer`. No dona punts ni afecta cap regla de negoci —
-només compta "aplaudiments"—, així que no calia protegir-la darrere d'una
-funció com `reclamar_activitat`. Definida a `supabase/likes.sql`.
+**Important:** `likes`, `comentaris` i `comentari_likes` són les úniques taules
+(a banda de les de fases futures) on el client escriu directament amb
+polítiques RLS normals, sense passar per cap funció `security definer`. Cap
+de les tres dona punts ni afecta cap regla de negoci — només compten
+"aplaudiments" o guarden text—, així que no calia protegir-les darrere d'una
+funció com `reclamar_activitat`. Definides a `supabase/likes.sql` i
+`supabase/comentaris.sql`.
 
 ---
 
@@ -536,8 +554,12 @@ d'una categoria concreta).
 3. **Fase 3 (en curs):** ratxes i monedes **fetes** (`processar_punts_validats`,
    cridada des de `reclamar_activitat`/`validar_completion`; indicadors 🔥/🪙 a
    la capçalera d'Activitats). Pestanya **Perfil feta**: avatar (bucket
-   `avatars`), historial paginat de les pròpies completions. **Pendent:**
-   recompenses, tasques compartides, estat del Panda.
+   `avatars`), historial paginat de les pròpies completions, i des del
+   rànquing es pot veure el perfil (de només lectura) de qualsevol membre
+   (`PerfilMembre.jsx`). Cooldown personal (`cooldown_individual`) per a
+   tasques amb exemplar propi (fer el llit, etc.). Comentaris al feed, amb
+   respostes i like. **Pendent:** recompenses, tasques compartides, estat
+   del Panda.
 4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
 
 **No implementis res de fases posteriors sense que s'hagi demanat explícitament.**
