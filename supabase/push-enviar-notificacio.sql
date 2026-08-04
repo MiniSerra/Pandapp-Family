@@ -5,18 +5,23 @@
 -- notificació push cridant l'edge function `enviar-push` via `pg_net`
 -- (asíncron: no bloqueja la transacció esperant resposta HTTP).
 --
--- Requereix, un cop executat aquest fitxer, UNA configuració manual que
--- NO es guarda a cap fitxer versionat perquè és un secret (mateix criteri
--- que la clau privada VAPID): executar, directament a l'SQL Editor,
---   alter database postgres set app.settings.push_webhook_secret = '<secret>';
--- amb el mateix valor que el secret `PUSH_WEBHOOK_SECRET` de l'edge
--- function. Sense això, aquesta funció no fa res (surt en silenci) —
+-- Requereix, un cop executat aquest fitxer, UNA configuració manual que NO
+-- es guarda a cap fitxer versionat perquè és un secret (mateix criteri que
+-- la clau privada VAPID): guardar el mateix valor que `PUSH_WEBHOOK_SECRET`
+-- de l'edge function dins de Supabase Vault, directament a l'SQL Editor:
+--   select vault.create_secret(
+--     '<el mateix valor que PUSH_WEBHOOK_SECRET>',
+--     'push_webhook_secret'
+--   );
+-- (Vault, no un paràmetre de base de dades: el rol amb què s'executa l'SQL
+-- Editor de Supabase no té prou privilegis per a `alter database ... set`
+-- en un paràmetre personalitzat — Vault és la via pensada per a això.)
+-- Sense el secret a Vault, aquesta funció no fa res (surt en silenci) —
 -- perquè els entorns sense el secret configurat (per exemple, mentre es
 -- desplega per primera vegada) no petin cap trigger.
 --
 -- L'URL de l'edge function NO és secreta (és el mateix domini públic que
--- `VITE_SUPABASE_URL`), així que és una constant amb valor per defecte —
--- `app.settings.push_function_url` només cal si mai canvia de projecte.
+-- `VITE_SUPABASE_URL`), així que és una constant amb valor per defecte.
 -- =====================================================================
 
 create extension if not exists pg_net;
@@ -33,12 +38,14 @@ security definer
 set search_path = public
 as $$
 declare
-  v_secret       text := current_setting('app.settings.push_webhook_secret', true);
-  v_function_url text := coalesce(
-    current_setting('app.settings.push_function_url', true),
-    'https://qndwjsowoucmncexmfih.supabase.co/functions/v1/enviar-push'
-  );
+  v_secret       text;
+  v_function_url text := 'https://qndwjsowoucmncexmfih.supabase.co/functions/v1/enviar-push';
 begin
+  select decrypted_secret into v_secret
+  from vault.decrypted_secrets
+  where name = 'push_webhook_secret'
+  limit 1;
+
   if v_secret is null or v_secret = '' then
     return;
   end if;
@@ -60,6 +67,6 @@ end;
 $$;
 
 comment on function public.enviar_notificacio_push(uuid, text, text, text) is
-  'Envia una notificació push a un usuari via l''edge function enviar-push (pg_net, asíncron). No fa res si app.settings.push_webhook_secret no està configurat. Ús intern, no exposada via RPC.';
+  'Envia una notificació push a un usuari via l''edge function enviar-push (pg_net, asíncron). Llegeix el secret compartit de Supabase Vault (nom "push_webhook_secret"); no fa res si encara no hi és. Ús intern, no exposada via RPC.';
 
 revoke all on function public.enviar_notificacio_push(uuid, text, text, text) from public;
