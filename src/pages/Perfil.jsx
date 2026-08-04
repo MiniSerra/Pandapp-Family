@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { comprimirImatge } from '../lib/fotos'
+import { anullarCompletion } from '../lib/completions'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 import TargetaHistorial from '../components/TargetaHistorial'
 import AvatarUsuari from '../components/AvatarUsuari'
@@ -87,6 +88,19 @@ export default function Perfil() {
     setCarregantMes(true)
     await carregaHistorial(historial.length)
     setCarregantMes(false)
+  }
+
+  // Retorna l'error (o null) perquè la targeta el mostri; si va bé, treu
+  // l'entrada de l'historial i recarrega ratxa/monedes (poden haver canviat).
+  async function handleEliminar(completionId) {
+    const { error: rpcError } = await anullarCompletion(completionId)
+
+    if (!rpcError) {
+      setHistorial((actual) => actual.filter((c) => c.id !== completionId))
+      carregaCapcalera()
+    }
+
+    return rpcError
   }
 
   async function handleTriaFoto(event) {
@@ -197,7 +211,11 @@ export default function Perfil() {
           <>
             <div className="space-y-2">
               {historial.map((completion) => (
-                <TargetaHistorial key={completion.id} completion={completion} />
+                <TargetaHistorial
+                  key={completion.id}
+                  completion={completion}
+                  onEliminar={handleEliminar}
+                />
               ))}
             </div>
 

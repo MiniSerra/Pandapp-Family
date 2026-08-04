@@ -218,7 +218,26 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   rànquing queda inservible des del primer dia.
 - **Anul·lació:** es pot desfer una reclamació pròpia amb `anullar_completion`
   dins dels primers 15 minuts. Retorna `foto_url`/`thumb_url` perquè el client
-  esborri els fitxers del bucket.
+  esborri els fitxers del bucket. Si la completion ja estava `'validada'`,
+  també reverteix les monedes i la ratxa que hagués donat
+  `processar_punts_validats`: resta les monedes d'aquesta completion concreta
+  si va ser ella qui va fer creuar el llindar diari, i decrementa
+  `dies_seguits` (mai per sota de 0) només si sense ella el dia ja no arriba
+  al llindar. Es recalcula amb l'estat actual assumint que no ha canviat res
+  més des de la validació (raonable dins de 15 minuts); casos límit (dos
+  creuaments el mateix dia, escut gastat en un dia anterior) queden resolts
+  amb una aproximació, mai amb saldo o `dies_seguits` negatius — és
+  intencionadament una aproximació de fase 3, no un recàlcul exacte. Les
+  completions de "Bonus de ratxa" (veure "Ratxes") mai reverteixen res en
+  esborrar-se — no són una reclamació real, mai poden ser "les que creuen
+  el llindar" — i la papereta no s'hi mostra a la interfície.
+  **Interfície feta:** icona de paperera (`--calent`) a les targetes pròpies
+  de menys de 15 minuts, tant al feed (`TargetaFeed.jsx`) com a l'historial
+  del propi perfil (`TargetaHistorial.jsx`/`Perfil.jsx`; no a `PerfilMembre.jsx`,
+  que és de només lectura, ni a les completions de "Bonus de ratxa"), amb
+  confirmació (`BottomSheetConfirmar.jsx`) abans d'esborrar.
+  `src/lib/completions.js` centralitza la crida a `anullar_completion` i
+  l'esborrat de les fotos del bucket.
 
 ---
 
@@ -261,7 +280,12 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   client (`crypto.randomUUID()`). Un cop pujades les fotos no es mouen ni es
   renombren encara que la reclamació tingui èxit — l'únic que verifiquen les
   polítiques de RLS (`supabase/storage.sql`) és que el primer segment de la
-  ruta sigui la `familia_id` de qui puja/llegeix.
+  ruta sigui la `familia_id` de qui puja/llegeix/esborra. **Política de
+  DELETE (fase 3):** calia afegir-la explícitament — sense ella
+  `storage.remove()` no fa res (no torna cap error, simplement no esborra
+  cap fila) i queden fitxers orfes. Necessària tant per al cleanup quan
+  `reclamar_activitat` falla després de pujar la foto com per a
+  `anullar_completion`.
 - **Bucket privat `avatars` (fase 3).** Un sol fitxer per usuari, sempre a
   `{familia_id}/{usuari_id}.webp`, sobreescrit amb `upload(..., { upsert: true })`
   en lloc d'acumular-se com a `fotos-tasques`. Com que aquí la ruta sí
@@ -442,6 +466,11 @@ Ambre i vermell **només** per a això. Si es fan servir per a res més, la seny
 es dilueix i es perd l'efecte. Sobre negre pur, `--tebi` i `--calent` són el
 color clar com a text sobre un fons fosc del mateix to (no el color saturat
 ple, que sobre negre cansa la vista).
+
+**Única excepció explícita:** la icona de paperera per eliminar una completion
+pròpia (Feed i historial del Perfil) també fa servir `--calent`, com a color
+de perill genèric, no d'urgència de tasca — són l'única acció destructiva de
+tota la interfície.
 
 ### Tokens
 

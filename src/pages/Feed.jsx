@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { extreuRutaDesDeUrlSignada } from '../lib/fotos'
+import { anullarCompletion } from '../lib/completions'
 import TargetaFeed from '../components/TargetaFeed'
 
 const BUCKET = 'fotos-tasques'
@@ -100,6 +101,18 @@ export default function Feed() {
         estat: data.estat,
         validada_per: data.validada_per,
       }))
+    }
+
+    return rpcError
+  }
+
+  // Retorna l'error (o null) perquè la targeta el mostri; si va bé, treu la
+  // targeta del feed sense recarregar-lo tot.
+  async function handleEliminar(completionId) {
+    const { error: rpcError } = await anullarCompletion(completionId)
+
+    if (!rpcError) {
+      setCompletions((actual) => actual.filter((c) => c.id !== completionId))
     }
 
     return rpcError
@@ -267,6 +280,7 @@ export default function Feed() {
           onAlternarLike={handleAlternarLike}
           onAfegeixComentari={handleAfegeixComentari}
           onAlternarLikeComentari={handleAlternarLikeComentari}
+          onEliminar={handleEliminar}
         />
       ))}
     </div>

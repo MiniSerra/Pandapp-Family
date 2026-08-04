@@ -1,5 +1,14 @@
 const ZONA = 'Europe/Madrid'
 
+// Mateixa finestra que comprova anullar_completion al servidor.
+export const FINESTRA_ANULLACIO_MS = 15 * 60 * 1000
+
+// Si encara es pot anul·lar una completion pròpia creada a `dataIso`. Només
+// per no pintar la icona quan el servidor la rebutjaria igualment.
+export function esPotAnullar(dataIso) {
+  return Date.now() - new Date(dataIso).getTime() < FINESTRA_ANULLACIO_MS
+}
+
 // Diferència (en ms) entre "hora de rellotge UTC" i "hora de rellotge a la
 // zona indicada" per a un instant concret. Les dues cadenes es parsegen amb
 // el mateix Date() del motor, així que la zona horària local del sistema en

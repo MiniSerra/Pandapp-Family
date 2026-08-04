@@ -19,9 +19,14 @@
 -- èxit — només cal que el primer segment sigui la `familia_id` correcta,
 -- que és l'únic que verifiquen les polítiques de sota.
 --
--- Fase 1: només INSERT i SELECT per a `authenticated`. No hi ha UPDATE ni
--- DELETE de client — l'esborrat als 14 dies el fa el cron amb la clau
--- secreta (service_role), que salta la RLS.
+-- Fase 1: INSERT i SELECT per a `authenticated`. No hi ha UPDATE de client.
+-- L'esborrat automàtic als 14 dies el fa el cron amb la clau secreta
+-- (service_role), que salta la RLS — però el client SÍ necessita poder
+-- esborrar (fase 3): quan `reclamar_activitat` falla després de pujar la
+-- foto (BottomSheetReclamar.jsx) i quan s'anul·la una completion pròpia
+-- (anullar_completion, veure src/lib/completions.js). Sense política de
+-- DELETE, `storage.remove()` no fa res (falla en silenci: no és cap error
+-- HTTP, simplement no esborra) i queden fitxers orfes al bucket.
 -- =====================================================================
 
 create policy "fotos-tasques: pujar dins de la propia familia"
@@ -38,6 +43,15 @@ create policy "fotos-tasques: pujar dins de la propia familia"
 create policy "fotos-tasques: veure dins de la propia familia"
   on storage.objects
   for select
+  to authenticated
+  using (
+    bucket_id = 'fotos-tasques'
+    and (storage.foldername(name))[1] = public.familia_id_actual()::text
+  );
+
+create policy "fotos-tasques: esborrar dins de la propia familia"
+  on storage.objects
+  for delete
   to authenticated
   using (
     bucket_id = 'fotos-tasques'
