@@ -92,7 +92,7 @@ const PESTANYES = [
 
 function BarraNavegacio({ pestanya, onCanvia }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-2 border-t border-vora bg-targeta px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-2 border-t border-vora bg-targeta px-4 pt-2 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)-10px))]">
       {PESTANYES.map(({ id, nom, Icona }) => {
         const activa = pestanya === id
         return (
