@@ -163,7 +163,8 @@ No és decoració: és el que converteix una llista de tasques en una responsabi
 
 ## Tasques compartides
 
-En reclamar una tasca es poden **etiquetar altres persones** que hi han participat.
+**Implementat a fase 3.** En reclamar una tasca es poden **etiquetar altres
+persones** que hi han participat.
 
 El pot es multiplica **abans** de repartir-se a parts iguals:
 
@@ -178,11 +179,46 @@ Sense aquesta prima, cooperar sortiria a compte de no fer-ho mai.
 
 **Regles:**
 - L'etiquetat ha de **confirmar** ("sí, hi era") perquè els punts s'abonin.
-- El **validador de la foto no pot ser cap participant**.
+- El **validador no pot ser cap participant** (ni qui ha reclamat ni cap
+  etiquetat, hagi confirmat o no).
 - Camp `compartible` per activitat. Fer el llit, posar menjar al gat o llegir **no**
   són compartibles. Regla: si la tasca no es fa realment més ràpida entre dos, no ho és.
-- Arrodoniment cap amunt; el residu se'l queda qui puja la foto.
+- **Arrodoniment avall** per persona; el residu (pot menys la suma repartida)
+  se l'emporta qui ha reclamat (`es_qui_puja`).
 - L'objectiu col·lectiu suma el **pot sencer**, no la part de cadascú.
+
+**`estat` (de la completion) i `confirmat` (de cada participació) són dues
+coses diferents:** `estat` diu si la completion en conjunt ja compta
+("s'ha validat"); `confirmat` diu si un participant CONCRET hi era de
+veritat. Els punts d'un participant només sumen a rànquings i progrés quan
+totes dues coses són certes (`completions.estat = 'validada' AND
+participacions.confirmat = true`) — filtrat al client a `ranquing.js` i
+`Activitats.jsx`, igual que ja es feia només amb `estat`.
+
+**Validació automàtica quan els participants cobreixen tota la família
+(`confirmar_participacio`):** si en confirmar un etiquetat ja no queda
+ningú pendent I el conjunt de participants (qui reclama + etiquetats) és
+exactament tots els membres de la família, no pot quedar ningú extern per
+validar-la — es valida sola en aquest mateix moment (`validada_per` és qui
+acaba de fer l'última confirmació) i es processen ratxa/monedes de tots els
+participants de cop. Si en queda algú de la família fora dels participants,
+la completion es queda `'pendent'` fins que aquesta persona (que no hi era)
+la validi amb `validar_completion` com sempre. Si un participant confirma
+QUAN la completion ja estava validada externament (algú de fora ho ha fet
+abans que ell confirmés), és en aquest moment que es processen la seva
+ratxa i monedes — no abans, encara que `estat` ja fos `'validada'`.
+`reclamar_activitat` accepta un 4t paràmetre `p_participants_ids` (filtra
+sol els que no siguin de la família o coincideixin amb qui reclama).
+
+**Interfície:** interruptor "Activitat compartida" a `BottomSheetReclamar.jsx`
+(només si `activitat.compartible`), amb selector multi-selecció dels altres
+membres. Al feed (`TargetaFeed.jsx`), cada targeta mostra els avatars dels
+participants ja confirmats (cercles lleugerament solapats) amb "Fet per
+{noms}", i si en queda algun de pendent, un avís ("X encara ha de
+confirmar") — amb un botó "Sí, hi era" (`confirmar_participacio`) visible
+només per a qui hi és etiquetat i encara no ha confirmat. És una acció
+diferent del botó "Confirmar" (`validar_completion`), que ara només surt
+per a qui NO és participant.
 
 ---
 
@@ -207,8 +243,9 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
 - Les **personals** tenen un **límit de 60 punts al dia**.
 - **Validació creuada (backend fet a fase 2):** una `completion` neix
   `'pendent'`, excepte les **personals**, que neixen `'validada'` a l'instant
-  (ningú més les pot confirmar). Un altre membre de la família —**mai** qui
-  l'ha creat— la valida amb `validar_completion`, que posa `estat = 'validada'`
+  (ningú més les pot confirmar). Un altre membre de la família —**mai cap
+  participant**, ni qui l'ha creat ni cap etiquetat d'una tasca compartida
+  (fase 3)— la valida amb `validar_completion`, que posa `estat = 'validada'`
   i `validada_per`. Els punts d'una completion `'pendent'` **no compten** al
   progrés del dia ni als rànquings fins que es valida (filtrat al client, a
   `Activitats.jsx` i `ranquing.js`). **Encara falta la interfície** (el feed)
