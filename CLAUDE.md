@@ -100,6 +100,11 @@ tasques compartides, fase 3). El resultat es guarda a
 - **Escut de ratxa:** un dia de gràcia al mes (o comprable amb monedes) que evita
   perdre la ratxa. Sense això, qui perd una ratxa llarga abandona l'app.
 
+**Implementat a fase 3:** tot dins de `processar_punts_validats` (mai al
+client). De moment només el dia de gràcia automàtic al mes; comprar-ne un amb
+monedes no està fet. `ultim_dia_complert`/`escut_usat_mes` són dates locals
+d'Europe/Madrid, no instants — una ratxa és per dies de calendari.
+
 ### Dues monedes
 
 - **Punts de rànquing:** no es gasten mai. Són la puntuació de la temporada.
@@ -319,6 +324,8 @@ propostes           id, tipus, activitat_id, payload, proposada_per, estat, cadu
 vots                proposta_id, usuari_id, vot, punts_suggerits, created_at
 torns               activitat_id, usuari_id, setmana
 monedes             usuari_id, saldo
+ratxes              usuari_id, dies_seguits, ultim_dia_complert (date local),
+                    escut_disponible, escut_usat_mes (date local)
 recompenses         id, familia_id, nom, cost
 bescanvis           recompensa_id, usuari_id, created_at
 resums              id, familia_id, usuari_id (null = familiar), periode, text
@@ -330,6 +337,13 @@ revés, cada consulta del rànquing ha de dividir i apareixen errors d'arrodonim
 **Important:** `punts_base_snapshot` (i `versio_punts`) a `completions` congelen
 els punts que valia l'activitat quan es va fer. Si es canvien els punts a mitja
 temporada, l'històric no s'ha de recalcular sol.
+
+**Important:** `monedes` i `ratxes` (fase 3) només es modifiquen des de
+`processar_punts_validats`, cridada des de `reclamar_activitat` (personals,
+validades a l'instant) i des de `validar_completion` (la resta). El bonus de
+ratxa i les fites es materialitzen com una `completion` més ("Bonus de ratxa",
+activitat de sistema per família, `estat = 'retirada'` perquè no surti al
+catàleg ni es pugui reclamar a mà).
 
 **Important:** `familia_id` i `creada_per` estan denormalitzats a `completions`
 perquè les polítiques de RLS i les consultes de feed/rànquing no calgui que facin
@@ -495,7 +509,10 @@ d'una categoria concreta).
    creador). Feed (`src/pages/Feed.jsx`): targeta amb foto o emoji, punts en
    `--panda`/`--tinta-sec` segons validada/pendent, botó "Confirmar" per a
    qui no l'ha creada, likes (taula `likes`, sense donar punts).
-3. **Fase 3:** ratxes, monedes i recompenses, tasques compartides, estat del Panda.
+3. **Fase 3 (en curs):** ratxes i monedes **fetes** (`processar_punts_validats`,
+   cridada des de `reclamar_activitat`/`validar_completion`; indicadors 🔥/🪙 a
+   la capçalera d'Activitats). **Pendent:** recompenses, tasques compartides,
+   estat del Panda.
 4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
 
 **No implementis res de fases posteriors sense que s'hagi demanat explícitament.**
