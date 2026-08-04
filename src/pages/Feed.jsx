@@ -31,8 +31,8 @@ export default function Feed() {
       supabase
         .from('completions')
         .select(
-          'id, activitat_id, creada_per, punts_base_snapshot, estat, foto_url, created_at, ' +
-            'activitats(nom, emoji), participacions(usuari_id, punts_assignats), likes(usuari_id), ' +
+          'id, activitat_id, creada_per, punts_base_snapshot, pot_total, estat, foto_url, created_at, ' +
+            'activitats(nom, emoji), participacions(usuari_id, punts_assignats, confirmat), likes(usuari_id), ' +
             'comentaris(id, usuari_id, resposta_a, text, created_at, comentari_likes(usuari_id))',
         )
         .eq('familia_id', profile.familia_id)
@@ -102,6 +102,20 @@ export default function Feed() {
         validada_per: data.validada_per,
       }))
     }
+
+    return rpcError
+  }
+
+  // Confirmar la pròpia participació pot desencadenar la validació
+  // automàtica de la completion (si cobreix tota la família) i canviar
+  // punts/ratxa/monedes de tothom: es recarrega tot el feed en lloc de
+  // provar d'endevinar l'estat resultant en local.
+  async function handleConfirmarParticipacio(completionId) {
+    const { error: rpcError } = await supabase.rpc('confirmar_participacio', {
+      p_completion_id: completionId,
+    })
+
+    if (!rpcError) await carregar()
 
     return rpcError
   }
@@ -281,6 +295,7 @@ export default function Feed() {
           onAfegeixComentari={handleAfegeixComentari}
           onAlternarLikeComentari={handleAlternarLikeComentari}
           onEliminar={handleEliminar}
+          onConfirmarParticipacio={handleConfirmarParticipacio}
         />
       ))}
     </div>
