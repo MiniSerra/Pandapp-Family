@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { comprimirImatge } from '../lib/fotos'
 import { anullarCompletion } from '../lib/completions'
+import { activarNotificacions, suportaNotificacionsPush } from '../lib/push'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 import TargetaHistorial from '../components/TargetaHistorial'
 import AvatarUsuari from '../components/AvatarUsuari'
@@ -22,6 +23,15 @@ export default function Perfil() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [pujantAvatar, setPujantAvatar] = useState(false)
   const [errorAvatar, setErrorAvatar] = useState('')
+
+  // Aproximació: si el permís ja és 'granted' assumim que ve d'aquest botó
+  // (l'única manera d'arribar-hi a l'app). No comprova si la subscripció
+  // concreta encara és vàlida al servidor.
+  const [notisActivades, setNotisActivades] = useState(
+    () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
+  )
+  const [activantNotis, setActivantNotis] = useState(false)
+  const [errorNotis, setErrorNotis] = useState('')
 
   const [historial, setHistorial] = useState([])
   const [carregantHistorial, setCarregantHistorial] = useState(true)
@@ -101,6 +111,15 @@ export default function Perfil() {
     }
 
     return rpcError
+  }
+
+  async function handleActivarNotificacions() {
+    setActivantNotis(true)
+    setErrorNotis('')
+    const { error } = await activarNotificacions(profile.id)
+    setActivantNotis(false)
+    if (error) setErrorNotis(error)
+    else setNotisActivades(true)
   }
 
   async function handleTriaFoto(event) {
@@ -189,6 +208,26 @@ export default function Perfil() {
 
         {errorAvatar && <p className="text-sm text-calent">{errorAvatar}</p>}
       </div>
+
+      {suportaNotificacionsPush() && (
+        <div className="bisell rounded-2xl border border-vora bg-targeta p-4 text-center">
+          {notisActivades ? (
+            <p className="font-body text-sm text-panda">Notificacions activades ✓</p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleActivarNotificacions}
+                disabled={activantNotis}
+                className="rounded-md bg-panda px-4 py-2 font-body text-sm font-medium text-paper disabled:opacity-50"
+              >
+                {activantNotis ? 'Activant…' : 'Activar notificacions'}
+              </button>
+              {errorNotis && <p className="mt-2 text-xs text-calent">{errorNotis}</p>}
+            </>
+          )}
+        </div>
+      )}
 
       {/* TODO fase 4: resum personal generat amb Gemini, es llegirà de la taula
           `resums` un cop existeixi el cron nocturn. De moment, no mostris res

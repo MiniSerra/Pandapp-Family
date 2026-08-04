@@ -1,0 +1,19 @@
+{
+  "name": "Pandapp Family",
+  "short_name": "Pandapp",
+  "description": "App familiar de productivitat i benestar: punts, rànquing i feed social.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "ca",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
