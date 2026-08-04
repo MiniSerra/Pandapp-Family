@@ -43,7 +43,7 @@ export default function Feed() {
       supabase.from('profiles').select('id, nom, avatar_url'),
       supabase
         .from('esdeveniments')
-        .select('id, tipus, dades, created_at')
+        .select('id, tipus, usuari_id, dades, created_at')
         .eq('familia_id', profile.familia_id)
         .order('created_at', { ascending: false }),
     ])
@@ -301,7 +301,11 @@ export default function Feed() {
     <div className="space-y-3 px-4 py-3 pb-8">
       {elements.map(({ tipus, item }) =>
         tipus === 'esdeveniment' ? (
-          <TargetaEsdeveniment key={`esdeveniment-${item.id}`} esdeveniment={item} />
+          <TargetaEsdeveniment
+            key={`esdeveniment-${item.id}`}
+            esdeveniment={item}
+            perfils={perfils}
+          />
         ) : (
           <TargetaFeed
             key={item.id}
