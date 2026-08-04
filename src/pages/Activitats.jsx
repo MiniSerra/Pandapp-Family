@@ -5,6 +5,7 @@ import { iniciPeriodeLocal, faTemps } from '../lib/temps'
 import FilaActivitat from '../components/FilaActivitat'
 import BlocActivitat from '../components/BlocActivitat'
 import BottomSheetReclamar from '../components/BottomSheetReclamar'
+import IndicadorsJugador from '../components/IndicadorsJugador'
 
 const ORDRE_CATEGORIES = [
   'casa',
@@ -244,6 +245,8 @@ export default function Activitats() {
   const [activitats, setActivitats] = useState([])
   const [completions, setCompletions] = useState([])
   const [perfils, setPerfils] = useState({})
+  const [ratxa, setRatxa] = useState(null)
+  const [monedes, setMonedes] = useState(null)
   const [carregant, setCarregant] = useState(true)
   const [error, setError] = useState('')
   const [activitatSeleccionada, setActivitatSeleccionada] = useState(null)
@@ -271,7 +274,7 @@ export default function Activitats() {
       Date.now() - DIES_HISTORIC * 24 * 60 * 60 * 1000,
     ).toISOString()
 
-    const [activitatsRes, completionsRes, perfilsRes] = await Promise.all([
+    const [activitatsRes, completionsRes, perfilsRes, ratxaRes, monedesRes] = await Promise.all([
       supabase
         .from('activitats')
         .select('*')
@@ -287,6 +290,10 @@ export default function Activitats() {
         .gte('created_at', desDe)
         .order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, nom'),
+      // ratxes/monedes encara poden no tenir fila (es creen soles la
+      // primera vegada que es completa el llindar diari).
+      supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
+      supabase.from('monedes').select('saldo').eq('usuari_id', profile.id).maybeSingle(),
     ])
 
     if (activitatsRes.error || completionsRes.error || perfilsRes.error) {
@@ -301,6 +308,8 @@ export default function Activitats() {
     setActivitats(activitatsRes.data)
     setCompletions(completionsRes.data)
     setPerfils(mapaPerfils)
+    setRatxa(ratxaRes.data ?? { dies_seguits: 0 })
+    setMonedes(monedesRes.data ?? { saldo: 0 })
     setCarregant(false)
   }, [profile])
 
@@ -400,8 +409,12 @@ export default function Activitats() {
 
   return (
     <div className="pb-8">
-      <div className="flex items-center justify-center border-b border-vora bg-targeta px-4 py-6">
+      <div className="flex items-center justify-center gap-4 border-b border-vora bg-targeta px-4 py-6">
         <AnellProgres punts={puntsAvui} llindar={llindar} />
+        <IndicadorsJugador
+          diesSeguits={ratxa?.dies_seguits ?? 0}
+          saldoMonedes={monedes?.saldo ?? 0}
+        />
       </div>
 
       <BarraCercaIVista cerca={cerca} onCerca={setCerca} vista={vista} onVista={setVista} />
