@@ -121,6 +121,34 @@ d'Europe/Madrid, no instants — una ratxa és per dies de calendari.
 
 Sense la segona moneda l'app és només una taula de rècords i s'esgota.
 
+### Recompenses
+
+**Implementat a fase 3, sense pestanya pròpia:** tocant l'indicador 🪙 a la
+capçalera d'Activitats (`IndicadorsJugador.jsx`, prop `onTocaMonedes`, només
+allà — a Perfil és només informatiu) s'obre un full amb el saldo i la
+llista de recompenses actives de la família.
+
+- **`recompenses`**: catàleg per família (nom, emoji, `cost` en monedes,
+  `activa`). De només lectura per als usuaris — es gestiona via SQL
+  Editor, com el catàleg d'activitats a fase 1. No hi ha interfície
+  d'administració encara.
+- **`bescanviar_recompensa`** (security definer): comprova que la
+  recompensa és de la família i està activa, que el saldo de monedes és
+  suficient (`for update` sobre la fila de `monedes`, evita que dos
+  bescanvis simultanis deixin saldo negatiu), resta el cost i insereix a
+  **`bescanvis`** (`cost_pagat` congela el cost del moment, com
+  `punts_base_snapshot` a `completions` — si el cost de la recompensa
+  canvia més endavant, l'històric no es recalcula sol).
+- **Esdeveniment al feed:** cada bescanvi registra també una fila a
+  `esdeveniments` (`tipus = 'bescanvi'`, amb `usuari_id` de qui l'ha fet —
+  a diferència de `objectiu_setmanal`, que és de tota la família i no en
+  té). `TargetaEsdeveniment.jsx` el pinta com "🎟️ {nom} s'ha bescanviat:
+  {recompensa}", igual de diferenciat de les targetes normals que
+  l'esdeveniment de l'objectiu setmanal. A diferència d'aquell, `bescanvi`
+  no té restricció d'unicitat: es pot repetir tantes vegades com es
+  vulgui (per això l'índex únic parcial d'`esdeveniments` només aplica
+  `where tipus = 'objectiu_setmanal'`).
+
 ### Rànquings i temporades
 
 - Rànquing **diari**, **setmanal** i **mensual**.
@@ -475,11 +503,13 @@ torns               activitat_id, usuari_id, setmana
 monedes             usuari_id, saldo
 ratxes              usuari_id, dies_seguits, ultim_dia_complert (date local),
                     escut_disponible, escut_usat_mes (date local)
-recompenses         id, familia_id, nom, cost
-bescanvis           recompensa_id, usuari_id, created_at
-resums              id, familia_id, usuari_id (null = familiar), periode, text
-esdeveniments       id, familia_id, tipus, setmana (date local), dades (jsonb),
+recompenses         id, familia_id, nom, emoji, cost, activa, created_at
+bescanvis           id, recompensa_id, usuari_id, familia_id, cost_pagat,
                     created_at
+resums              id, familia_id, usuari_id (null = familiar), periode, text
+esdeveniments       id, familia_id, usuari_id (null = de tota la família),
+                    tipus (objectiu_setmanal|bescanvi), setmana (date local,
+                    només objectiu_setmanal), dades (jsonb), created_at
 ```
 
 **Important:** els punts van a `participacions`, no a `completions`. Si es fa al
@@ -695,7 +725,8 @@ d'una categoria concreta).
    confirmació, validació automàtica quan cobreixen tota la família —
    veure "Tasques compartides"). **Objectiu col·lectiu setmanal fet**
    (capçalera d'Activitats + esdeveniment al feed, veure "Objectiu
-   col·lectiu"). **Pendent:** recompenses, estat del Panda.
+   col·lectiu"). **Recompenses fetes** (menú des de l'indicador 🪙 de la
+   capçalera, veure "Recompenses"). **Pendent:** estat del Panda.
 4. **Fase 4 (en curs):** notificacions push **fetes en part** — infraestructura
    (Web Push, VAPID, `subscripcions_push`, edge function `enviar-push`) i la
    notificació d'algú fent una activitat, veure "Notificacions push".
