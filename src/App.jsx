@@ -92,7 +92,7 @@ const PESTANYES = [
 
 function BarraNavegacio({ pestanya, onCanvia }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-2 border-t border-vora bg-targeta px-4 py-2">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-2 border-t border-vora bg-targeta px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {PESTANYES.map(({ id, nom, Icona }) => {
         const activa = pestanya === id
         return (
@@ -144,7 +144,7 @@ function App() {
         </button>
       </header>
 
-      <main className="flex-1 pb-16">
+      <main className="flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))]">
         {profile ? (
           <>
             {pestanya === 'activitats' && <Activitats />}
