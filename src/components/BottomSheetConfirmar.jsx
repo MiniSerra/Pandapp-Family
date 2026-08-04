@@ -1,15 +1,24 @@
 // Full de confirmació genèric, mateix estil de bottom sheet que
-// BottomSheetReclamar. De moment només el fa servir l'eliminació d'una
-// completion pròpia (Feed i historial del Perfil).
+// BottomSheetReclamar. `variant="perill"` (per defecte) és per a l'única
+// acció destructiva de la interfície (eliminar una completion pròpia,
+// veure CLAUDE.md "Disseny"): botó en --calent. `variant="principal"` és
+// per a confirmacions normals no destructives (p. ex. bescanviar una
+// recompensa): botó en --panda, com la resta de botons principals.
 export default function BottomSheetConfirmar({
   titol,
   missatge,
   textConfirmar = 'Eliminar',
+  textEnviant = 'Eliminant…',
+  variant = 'perill',
   enviant,
   error,
   onCancelar,
   onConfirmar,
 }) {
+  const classesConfirmar =
+    variant === 'principal'
+      ? 'bg-panda text-paper'
+      : 'bisell border border-calent-vora bg-calent-fons text-calent'
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-paper/70" onClick={onCancelar}>
       <div
@@ -34,9 +43,9 @@ export default function BottomSheetConfirmar({
             type="button"
             onClick={onConfirmar}
             disabled={enviant}
-            className="bisell flex-1 rounded-md border border-calent-vora bg-calent-fons px-4 py-3 text-base font-medium text-calent disabled:opacity-50"
+            className={`flex-1 rounded-md px-4 py-3 text-base font-medium disabled:opacity-50 ${classesConfirmar}`}
           >
-            {enviant ? 'Eliminant…' : textConfirmar}
+            {enviant ? textEnviant : textConfirmar}
           </button>
         </div>
       </div>

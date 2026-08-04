@@ -5,6 +5,7 @@ import { iniciPeriodeLocal, faTemps } from '../lib/temps'
 import FilaActivitat from '../components/FilaActivitat'
 import BlocActivitat from '../components/BlocActivitat'
 import BottomSheetReclamar from '../components/BottomSheetReclamar'
+import BottomSheetRecompenses from '../components/BottomSheetRecompenses'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 
 // Ordre i aparença preferits per a les categories conegudes — el mateix
@@ -253,6 +254,8 @@ export default function Activitats() {
   const [ratxa, setRatxa] = useState(null)
   const [monedes, setMonedes] = useState(null)
   const [familia, setFamilia] = useState(null)
+  const [recompenses, setRecompenses] = useState([])
+  const [mostrantRecompenses, setMostrantRecompenses] = useState(false)
   const [carregant, setCarregant] = useState(true)
   const [error, setError] = useState('')
   const [activitatSeleccionada, setActivitatSeleccionada] = useState(null)
@@ -280,33 +283,46 @@ export default function Activitats() {
       Date.now() - DIES_HISTORIC * 24 * 60 * 60 * 1000,
     ).toISOString()
 
-    const [activitatsRes, completionsRes, perfilsRes, ratxaRes, monedesRes, familiaRes] =
-      await Promise.all([
-        supabase
-          .from('activitats')
-          .select('*')
-          .eq('estat', 'activa')
-          .order('categoria')
-          .order('nom'),
-        supabase
-          .from('completions')
-          .select(
-            'id, activitat_id, creada_per, created_at, estat, pot_total, participacions(usuari_id, punts_assignats, confirmat)',
-          )
-          .eq('familia_id', profile.familia_id)
-          .gte('created_at', desDe)
-          .order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, nom, avatar_url'),
-        // ratxes/monedes encara poden no tenir fila (es creen soles la
-        // primera vegada que es completa el llindar diari).
-        supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
-        supabase.from('monedes').select('saldo').eq('usuari_id', profile.id).maybeSingle(),
-        supabase
-          .from('families')
-          .select('objectiu_setmanal, premi_setmanal')
-          .eq('id', profile.familia_id)
-          .single(),
-      ])
+    const [
+      activitatsRes,
+      completionsRes,
+      perfilsRes,
+      ratxaRes,
+      monedesRes,
+      familiaRes,
+      recompensesRes,
+    ] = await Promise.all([
+      supabase
+        .from('activitats')
+        .select('*')
+        .eq('estat', 'activa')
+        .order('categoria')
+        .order('nom'),
+      supabase
+        .from('completions')
+        .select(
+          'id, activitat_id, creada_per, created_at, estat, pot_total, participacions(usuari_id, punts_assignats, confirmat)',
+        )
+        .eq('familia_id', profile.familia_id)
+        .gte('created_at', desDe)
+        .order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, nom, avatar_url'),
+      // ratxes/monedes encara poden no tenir fila (es creen soles la
+      // primera vegada que es completa el llindar diari).
+      supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
+      supabase.from('monedes').select('saldo').eq('usuari_id', profile.id).maybeSingle(),
+      supabase
+        .from('families')
+        .select('objectiu_setmanal, premi_setmanal')
+        .eq('id', profile.familia_id)
+        .single(),
+      supabase
+        .from('recompenses')
+        .select('id, nom, emoji, cost')
+        .eq('familia_id', profile.familia_id)
+        .eq('activa', true)
+        .order('cost'),
+    ])
 
     if (activitatsRes.error || completionsRes.error || perfilsRes.error) {
       setError("No s'ha pogut carregar el catàleg. Comprova la connexió.")
@@ -324,6 +340,7 @@ export default function Activitats() {
     setRatxa(ratxaRes.data ?? { dies_seguits: 0 })
     setMonedes(monedesRes.data ?? { saldo: 0 })
     setFamilia(familiaRes.data ?? null)
+    setRecompenses(recompensesRes.data ?? [])
     setCarregant(false)
 
     const ambAvatar = perfilsRes.data.filter((p) => p.avatar_url)
@@ -431,6 +448,19 @@ export default function Activitats() {
     }, 900)
   }
 
+  // Retorna l'error (o null) perquè el full de recompenses el mostri; en
+  // èxit recarrega tot (saldo inclòs) igual que després de reclamar.
+  async function handleBescanviar(recompensaId) {
+    const { error: rpcError } = await supabase.rpc('bescanviar_recompensa', {
+      p_recompensa_id: recompensaId,
+    })
+
+    if (rpcError) return rpcError
+
+    await carregar()
+    return null
+  }
+
   if (carregant) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -467,6 +497,7 @@ export default function Activitats() {
           <IndicadorsJugador
             diesSeguits={ratxa?.dies_seguits ?? 0}
             saldoMonedes={monedes?.saldo ?? 0}
+            onTocaMonedes={() => setMostrantRecompenses(true)}
           />
         </div>
 
@@ -544,6 +575,15 @@ export default function Activitats() {
           avatarUrls={avatarUrls}
           onTancar={() => setActivitatSeleccionada(null)}
           onExit={gestionaExit}
+        />
+      )}
+
+      {mostrantRecompenses && (
+        <BottomSheetRecompenses
+          recompenses={recompenses}
+          saldo={monedes?.saldo ?? 0}
+          onTancar={() => setMostrantRecompenses(false)}
+          onBescanviar={handleBescanviar}
         />
       )}
     </div>
