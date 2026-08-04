@@ -63,10 +63,15 @@ export default function PerfilMembre({ usuariId, onTancar }) {
 
   const carregaHistorial = useCallback(
     async (desDeIndex) => {
+      // Mateix criteri que Perfil.jsx: punts_assignats de la pròpia
+      // participació d'aquest membre, no el pot sencer (punts_base_snapshot).
       const { data, error: historialError } = await supabase
         .from('completions')
-        .select('id, punts_base_snapshot, estat, created_at, activitats(nom, emoji)')
+        .select(
+          'id, estat, created_at, activitats(nom, emoji), participacions!inner(punts_assignats)',
+        )
         .eq('creada_per', usuariId)
+        .eq('participacions.usuari_id', usuariId)
         .order('created_at', { ascending: false })
         .range(desDeIndex, desDeIndex + MIDA_PAGINA_HISTORIAL - 1)
 

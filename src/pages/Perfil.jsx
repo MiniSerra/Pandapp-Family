@@ -70,10 +70,18 @@ export default function Perfil() {
     async (desDeIndex) => {
       if (!profile) return
 
+      // punts_assignats de la pròpia participació, no punts_base_snapshot
+      // (el pot sencer): en una tasca compartida són valors diferents —
+      // veure CLAUDE.md "Tasques compartides". `!inner` + el filtre sobre
+      // participacions.usuari_id fan que cada completion només porti la
+      // fila de participació de qui mira l'historial.
       const { data, error } = await supabase
         .from('completions')
-        .select('id, punts_base_snapshot, estat, created_at, activitats(nom, emoji)')
+        .select(
+          'id, estat, created_at, activitats(nom, emoji), participacions!inner(punts_assignats)',
+        )
         .eq('creada_per', profile.id)
+        .eq('participacions.usuari_id', profile.id)
         .order('created_at', { ascending: false })
         .range(desDeIndex, desDeIndex + MIDA_PAGINA_HISTORIAL - 1)
 

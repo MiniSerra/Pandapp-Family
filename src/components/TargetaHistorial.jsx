@@ -16,6 +16,9 @@ export default function TargetaHistorial({ completion, onEliminar }) {
 
   const pendent = completion.estat === 'pendent'
   const activitat = completion.activitats
+  // Punts que aquesta persona concreta es va endur, no el pot sencer: en
+  // una tasca compartida (fase 3) poden diferir de punts_base_snapshot.
+  const punts = completion.participacions?.[0]?.punts_assignats ?? 0
   // "Bonus de ratxa" és una completion de sistema, no una reclamació: no té
   // sentit poder-la eliminar (veure comentari a anullar_completion).
   const potEliminar =
@@ -51,7 +54,7 @@ export default function TargetaHistorial({ completion, onEliminar }) {
           pendent ? 'text-tinta-sec' : 'text-panda'
         }`}
       >
-        {completion.punts_base_snapshot}
+        {punts}
       </span>
 
       {potEliminar && (
