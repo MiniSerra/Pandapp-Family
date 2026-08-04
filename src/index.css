@@ -33,6 +33,9 @@ body {
   color: var(--color-tinta);
   font-family: var(--font-body);
   color-scheme: dark;
+  /* Evita que el "bounce" natiu d'iOS dobli l'efecte del pull-to-refresh
+     propi (PullToRefresh.jsx). */
+  overscroll-behavior-y: contain;
 }
 
 /* Xips de categoria: desplaçables horitzontalment sense barra de scroll visible. */

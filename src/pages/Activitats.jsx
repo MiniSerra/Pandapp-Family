@@ -7,6 +7,7 @@ import BlocActivitat from '../components/BlocActivitat'
 import BottomSheetReclamar from '../components/BottomSheetReclamar'
 import BottomSheetRecompenses from '../components/BottomSheetRecompenses'
 import IndicadorsJugador from '../components/IndicadorsJugador'
+import PullToRefresh from '../components/PullToRefresh'
 
 // Ordre i aparença preferits per a les categories conegudes — el mateix
 // per als xips i per a l'agrupació de la llista, ja no dues llistes que es
@@ -463,24 +464,28 @@ export default function Activitats() {
 
   if (carregant) {
     return (
-      <div className="flex flex-1 items-center justify-center py-16">
-        <p className="text-tinta-sec">Carregant activitats…</p>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 items-center justify-center py-16">
+          <p className="text-tinta-sec">Carregant activitats…</p>
+        </div>
+      </PullToRefresh>
     )
   }
 
   if (error) {
     return (
-      <div className="flex flex-1 flex-col items-center gap-3 py-16">
-        <p className="text-sm text-calent">{error}</p>
-        <button
-          type="button"
-          onClick={carregar}
-          className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
-        >
-          Torna-ho a provar
-        </button>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 flex-col items-center gap-3 py-16">
+          <p className="text-sm text-calent">{error}</p>
+          <button
+            type="button"
+            onClick={carregar}
+            className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
+          >
+            Torna-ho a provar
+          </button>
+        </div>
+      </PullToRefresh>
     )
   }
 
@@ -490,6 +495,7 @@ export default function Activitats() {
   const percentSetmanal = objectiuSetmanal > 0 ? Math.min(1, sumaSetmanal / objectiuSetmanal) : 0
 
   return (
+    <PullToRefresh onRefrescar={carregar}>
     <div className="pb-8">
       <div className="border-b border-vora bg-targeta px-4 py-6">
         <div className="flex items-center justify-center gap-4">
@@ -587,5 +593,6 @@ export default function Activitats() {
         />
       )}
     </div>
+    </PullToRefresh>
   )
 }

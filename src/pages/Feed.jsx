@@ -5,6 +5,7 @@ import { extreuRutaDesDeUrlSignada } from '../lib/fotos'
 import { anullarCompletion } from '../lib/completions'
 import TargetaFeed from '../components/TargetaFeed'
 import TargetaEsdeveniment from '../components/TargetaEsdeveniment'
+import PullToRefresh from '../components/PullToRefresh'
 
 const BUCKET = 'fotos-tasques'
 const BUCKET_AVATARS = 'avatars'
@@ -265,39 +266,46 @@ export default function Feed() {
 
   if (carregant) {
     return (
-      <div className="flex flex-1 items-center justify-center py-16">
-        <p className="text-tinta-sec">Carregant el feed…</p>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 items-center justify-center py-16">
+          <p className="text-tinta-sec">Carregant el feed…</p>
+        </div>
+      </PullToRefresh>
     )
   }
 
   if (error) {
     return (
-      <div className="flex flex-1 flex-col items-center gap-3 py-16">
-        <p className="text-sm text-calent">{error}</p>
-        <button
-          type="button"
-          onClick={carregar}
-          className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
-        >
-          Torna-ho a provar
-        </button>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 flex-col items-center gap-3 py-16">
+          <p className="text-sm text-calent">{error}</p>
+          <button
+            type="button"
+            onClick={carregar}
+            className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
+          >
+            Torna-ho a provar
+          </button>
+        </div>
+      </PullToRefresh>
     )
   }
 
   if (elements.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center gap-2 px-4 py-16 text-center">
-        <p className="text-tinta">Encara no hi ha res al feed.</p>
-        <p className="text-sm text-tinta-sec">
-          Fes la teva primera tasca des de la pestanya Activitats!
-        </p>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 flex-col items-center gap-2 px-4 py-16 text-center">
+          <p className="text-tinta">Encara no hi ha res al feed.</p>
+          <p className="text-sm text-tinta-sec">
+            Fes la teva primera tasca des de la pestanya Activitats!
+          </p>
+        </div>
+      </PullToRefresh>
     )
   }
 
   return (
+    <PullToRefresh onRefrescar={carregar}>
     <div className="space-y-3 px-4 py-3 pb-8">
       {elements.map(({ tipus, item }) =>
         tipus === 'esdeveniment' ? (
@@ -325,5 +333,6 @@ export default function Feed() {
         ),
       )}
     </div>
+    </PullToRefresh>
   )
 }

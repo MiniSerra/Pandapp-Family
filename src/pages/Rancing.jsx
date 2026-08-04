@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { PERIODES_RANQUING, calculaClassificacions } from '../lib/ranquing'
 import PerfilMembre from '../components/PerfilMembre'
+import PullToRefresh from '../components/PullToRefresh'
 
 // Marge de seguretat perquè el rànquing mensual sempre inclogui tot el mes
 // en curs (fins a 31 dies), calculat després en client amb iniciPeriodeLocal.
@@ -113,30 +114,35 @@ export default function Rancing() {
 
   if (carregant) {
     return (
-      <div className="flex flex-1 items-center justify-center py-16">
-        <p className="text-tinta-sec">Carregant rànquing…</p>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 items-center justify-center py-16">
+          <p className="text-tinta-sec">Carregant rànquing…</p>
+        </div>
+      </PullToRefresh>
     )
   }
 
   if (error) {
     return (
-      <div className="flex flex-1 flex-col items-center gap-3 py-16">
-        <p className="text-sm text-calent">{error}</p>
-        <button
-          type="button"
-          onClick={carregar}
-          className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
-        >
-          Torna-ho a provar
-        </button>
-      </div>
+      <PullToRefresh onRefrescar={carregar}>
+        <div className="flex flex-1 flex-col items-center gap-3 py-16">
+          <p className="text-sm text-calent">{error}</p>
+          <button
+            type="button"
+            onClick={carregar}
+            className="rounded-md bg-panda px-4 py-2 text-sm font-medium text-paper"
+          >
+            Torna-ho a provar
+          </button>
+        </div>
+      </PullToRefresh>
     )
   }
 
   const classificacio = classificacions[periode] ?? []
 
   return (
+    <PullToRefresh onRefrescar={carregar}>
     <div className="pb-8">
       <PestanyesPeriode actiu={periode} onCanvia={setPeriode} />
 
@@ -160,5 +166,6 @@ export default function Rancing() {
         />
       )}
     </div>
+    </PullToRefresh>
   )
 }

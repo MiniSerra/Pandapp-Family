@@ -7,6 +7,7 @@ import { activarNotificacions, suportaNotificacionsPush } from '../lib/push'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 import TargetaHistorial from '../components/TargetaHistorial'
 import AvatarUsuari from '../components/AvatarUsuari'
+import PullToRefresh from '../components/PullToRefresh'
 
 const BUCKET_AVATARS = 'avatars'
 // Prou perquè es vegi mentre es té la pantalla oberta; es torna a generar
@@ -108,6 +109,15 @@ export default function Perfil() {
     setCarregantMes(false)
   }
 
+  // Refresc combinat per al pull-to-refresh: la capçalera (ratxa, monedes,
+  // avatar) i la primera pàgina de l'historial, les mateixes crides que ja
+  // es fan en muntar la pàgina.
+  async function refrescarTot() {
+    setCarregantHistorial(true)
+    await Promise.all([carregaCapcalera(), carregaHistorial(0)])
+    setCarregantHistorial(false)
+  }
+
   // Retorna l'error (o null) perquè la targeta el mostri; si va bé, treu
   // l'entrada de l'historial i recarrega ratxa/monedes (poden haver canviat).
   async function handleEliminar(completionId) {
@@ -183,6 +193,7 @@ export default function Perfil() {
   }
 
   return (
+    <PullToRefresh onRefrescar={refrescarTot}>
     <div className="space-y-6 px-4 py-6 pb-8">
       <div className="flex flex-col items-center gap-3 text-center">
         <button
@@ -280,5 +291,6 @@ export default function Perfil() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   )
 }
