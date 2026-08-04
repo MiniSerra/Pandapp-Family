@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
+import { extreuRutaDesDeUrlSignada } from '../lib/fotos'
 import TargetaFeed from '../components/TargetaFeed'
 
 const BUCKET = 'fotos-tasques'
@@ -8,21 +9,6 @@ const BUCKET = 'fotos-tasques'
 // vegada que es carrega la pantalla (veure CLAUDE.md "Fotos").
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
 const LIMIT_FEED = 50
-
-// `foto_url` guarda la URL signada que hi havia en el moment de reclamar
-// (caduca als 60 min), no la ruta al bucket. Per poder-la tornar a signar
-// cal recuperar la ruta original, que la URL ja conté abans del "?token=".
-function extreuRutaDesDeUrlSignada(urlSignada, bucket) {
-  try {
-    const url = new URL(urlSignada)
-    const prefix = `/storage/v1/object/sign/${bucket}/`
-    const index = url.pathname.indexOf(prefix)
-    if (index === -1) return null
-    return decodeURIComponent(url.pathname.slice(index + prefix.length))
-  } catch {
-    return null
-  }
-}
 
 export default function Feed() {
   const { profile } = useAuth()

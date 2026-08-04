@@ -73,3 +73,19 @@ export async function comprimirImatge(file) {
 
   return { original, thumb, tipus, extensio }
 }
+
+// `foto_url`/`thumb_url` guarden la URL signada que hi havia en el moment
+// de reclamar (caduca als 60 min), no la ruta al bucket. Per poder-la
+// tornar a signar cal recuperar la ruta original, que la URL ja conté
+// abans del "?token=". Compartit entre Feed.jsx i Perfil.jsx.
+export function extreuRutaDesDeUrlSignada(urlSignada, bucket) {
+  try {
+    const url = new URL(urlSignada)
+    const prefix = `/storage/v1/object/sign/${bucket}/`
+    const index = url.pathname.indexOf(prefix)
+    if (index === -1) return null
+    return decodeURIComponent(url.pathname.slice(index + prefix.length))
+  } catch {
+    return null
+  }
+}

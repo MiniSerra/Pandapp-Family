@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Activitats from './pages/Activitats'
 import Feed from './pages/Feed'
 import Rancing from './pages/Rancing'
+import Perfil from './pages/Perfil'
 
 function IconaActivitats() {
   return (
@@ -64,10 +65,29 @@ function IconaFeed() {
   )
 }
 
+function IconaPerfil() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="10" cy="7" r="3" />
+      <path d="M4 16.5c0-2.8 2.7-4.5 6-4.5s6 1.7 6 4.5" />
+    </svg>
+  )
+}
+
 const PESTANYES = [
   { id: 'activitats', nom: 'Activitats', Icona: IconaActivitats },
   { id: 'feed', nom: 'Feed', Icona: IconaFeed },
   { id: 'ranquing', nom: 'Rànquing', Icona: IconaRanquing },
+  { id: 'perfil', nom: 'Perfil', Icona: IconaPerfil },
 ]
 
 function BarraNavegacio({ pestanya, onCanvia }) {
@@ -130,6 +150,7 @@ function App() {
             {pestanya === 'activitats' && <Activitats />}
             {pestanya === 'feed' && <Feed />}
             {pestanya === 'ranquing' && <Rancing />}
+            {pestanya === 'perfil' && <Perfil />}
           </>
         ) : (
           <p className="p-4 text-sm text-calent">No s'ha pogut carregar el teu perfil.</p>
