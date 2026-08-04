@@ -176,9 +176,9 @@ create table public.completions (
   -- punts_base × multiplicador d'escalada, ja arrodonit. Es calcula dins
   -- de reclamar_activitat i mai es recalcula després.
   punts_base_snapshot   integer not null check (punts_base_snapshot > 0),
-  -- total de punts del pot abans de repartir-se entre participants
-  -- (ja inclourà el multiplicador de grup quan les tasques compartides
-  -- arribin a la fase 3; de moment sempre és igual a punts_base_snapshot).
+  -- total de punts del pot abans de repartir-se entre participants. Igual
+  -- a punts_base_snapshot si ningú més hi participa; si és una tasca
+  -- compartida (fase 3), ja inclou el multiplicador de grup.
   pot_total             integer not null check (pot_total >= 0),
   foto_url              text,
   thumb_url             text,
@@ -544,15 +544,34 @@ revoke all on function public.processar_punts_validats(uuid, uuid, uuid) from pu
 -- FUNCIÓ: reclamar_activitat
 -- =====================================================================
 -- Únic punt d'entrada per crear una completion. Tota la lògica de
--- negoci (cooldown, límit personal diari, foto obligatòria, càlcul de
--- l'escalada per oblit, estat inicial de validació) viu aquí, mai al
--- client, perquè és l'únic lloc
+-- negoci (cooldown, límit personal diari, càlcul de l'escalada per
+-- oblit, tasques compartides, estat inicial de validació) viu aquí, mai
+-- al client, perquè és l'únic lloc
 -- on es pot garantir atomicitat (bloqueig de fila) i que ningú se salti
 -- les regles cridant directament la taula.
+--
+-- Tasques compartides (fase 3, veure CLAUDE.md "Tasques compartides"):
+-- p_participants_ids són els MEMBRES ETIQUETATS a més de qui reclama (mai
+-- cal incloure's un mateix). Es filtren els que no pertanyin a la família
+-- o coincideixin amb qui reclama — per tant és segur passar-hi qualsevol
+-- llista sense pre-validar-la al client. Amb participants vàlids, el pot
+-- (punts_base_snapshot, ja amb l'escalada aplicada) es multiplica segons
+-- el nombre total de participants (multiplicador = 1 + 0.4×(n-1): 1→x1,
+-- 2→x1.4, 3→x1.8, 4→x2.2) i es reparteix a parts iguals arrodonint AVALL;
+-- el residu se l'emporta qui reclama. Els participants etiquetats neixen
+-- amb `confirmat = false` — veure `confirmar_participacio`.
+--
+-- S'afegeix un 4t paràmetre (p_participants_ids) a una signatura que ja
+-- existia: `create or replace` NO substitueix una funció amb una signatura
+-- diferent, en crearia una de sobrecarregada a part. Cal eliminar
+-- explícitament la versió antiga de 3 paràmetres.
+drop function if exists public.reclamar_activitat(uuid, text, text);
+
 create or replace function public.reclamar_activitat(
   p_activitat_id uuid,
   p_foto_url text default null,
-  p_thumb_url text default null
+  p_thumb_url text default null,
+  p_participants_ids uuid[] default null
 )
 returns public.completions
 language plpgsql
@@ -569,6 +588,13 @@ declare
   v_dies_passats_periode numeric;
   v_multiplicador        numeric;
   v_punts_calculats      integer;
+  v_participants_valids  uuid[];
+  v_n_participants       integer;
+  v_multiplicador_grup   numeric;
+  v_pot_total            integer;
+  v_punts_per_persona    integer;
+  v_residu               integer;
+  v_participant_id       uuid;
   v_estat_inicial        text;
   v_completion           public.completions%rowtype;
 begin
@@ -653,9 +679,33 @@ begin
     end if;
   end if;
 
+  -- Tasques compartides: només activitats compartible = true. Es filtren
+  -- de p_participants_ids els ids que no pertanyin a la família o que
+  -- coincideixin amb qui reclama (mai cal que el client ho faci bé).
+  if p_participants_ids is not null and array_length(p_participants_ids, 1) > 0 then
+    if not v_activitat.compartible then
+      raise exception 'Aquesta activitat no es pot compartir amb altres participants.';
+    end if;
+
+    select array_agg(id) into v_participants_valids
+    from public.profiles
+    where familia_id = v_familia_id
+      and id = any(p_participants_ids)
+      and id <> v_usuari_id;
+  end if;
+
+  v_n_participants := 1 + coalesce(array_length(v_participants_valids, 1), 0);
+  v_multiplicador_grup := 1 + 0.4 * (v_n_participants - 1);
+  v_pot_total := round(v_punts_calculats * v_multiplicador_grup)::integer;
+  v_punts_per_persona := floor(v_pot_total::numeric / v_n_participants)::integer;
+  v_residu := v_pot_total - (v_punts_per_persona * v_n_participants);
+
   -- Validació creuada (fase 2): les personals es validen soles a l'instant
-  -- (ningú més les pot confirmar); la resta neix 'pendent' fins que un
-  -- altre membre de la família la valida amb validar_completion.
+  -- (ningú més les pot confirmar, mai són compartides); la resta neix
+  -- 'pendent' fins que tots els participants etiquetats confirmin i,
+  -- si entre tots cobreixen la família sencera, es validi sola (veure
+  -- `confirmar_participacio`), o fins que algú extern la valida amb
+  -- `validar_completion`.
   v_estat_inicial := case when v_activitat.es_personal then 'validada' else 'pendent' end;
 
   insert into public.completions (
@@ -664,7 +714,7 @@ begin
     foto_url, thumb_url, estat
   ) values (
     v_activitat.id, v_familia_id, v_usuari_id,
-    v_activitat.versio, v_punts_calculats, v_punts_calculats,
+    v_activitat.versio, v_punts_calculats, v_pot_total,
     p_foto_url, p_thumb_url, v_estat_inicial
   )
   returning * into v_completion;
@@ -672,8 +722,18 @@ begin
   insert into public.participacions (
     completion_id, usuari_id, punts_assignats, confirmat, es_qui_puja
   ) values (
-    v_completion.id, v_usuari_id, v_punts_calculats, true, true
+    v_completion.id, v_usuari_id, v_punts_per_persona + v_residu, true, true
   );
+
+  if v_participants_valids is not null then
+    foreach v_participant_id in array v_participants_valids loop
+      insert into public.participacions (
+        completion_id, usuari_id, punts_assignats, confirmat, es_qui_puja
+      ) values (
+        v_completion.id, v_participant_id, v_punts_per_persona, false, false
+      );
+    end loop;
+  end if;
 
   if v_estat_inicial = 'validada' then
     perform public.processar_punts_validats(v_usuari_id, v_familia_id, v_completion.id);
@@ -683,19 +743,20 @@ begin
 end;
 $$;
 
-comment on function public.reclamar_activitat(uuid, text, text) is
-  'Únic punt d''entrada per reclamar una activitat: comprova cooldown (individual si cooldown_individual o es_personal, compartit altrament), calcula l''escalada per oblit i el límit personal diari amb el resultat, decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participació en una sola transacció. La foto és sempre opcional (requereix_foto ja no bloqueja res, veure CLAUDE.md "Validació de tasques").';
+comment on function public.reclamar_activitat(uuid, text, text, uuid[]) is
+  'Únic punt d''entrada per reclamar una activitat: comprova cooldown (individual si cooldown_individual o es_personal, compartit altrament), calcula l''escalada per oblit i el límit personal diari amb el resultat, reparteix el pot entre els participants si n''hi ha (tasques compartides), decideix l''estat inicial (validada si és personal, pendent altrament) i crea completion + participacions en una sola transacció. La foto és sempre opcional.';
 
-revoke all on function public.reclamar_activitat(uuid, text, text) from public;
-grant execute on function public.reclamar_activitat(uuid, text, text) to authenticated;
+revoke all on function public.reclamar_activitat(uuid, text, text, uuid[]) from public;
+grant execute on function public.reclamar_activitat(uuid, text, text, uuid[]) to authenticated;
 
 -- =====================================================================
 -- FUNCIÓ: validar_completion
 -- =====================================================================
--- Valida una completion 'pendent' (fase 2). El validador MAI pot ser qui
--- l'ha creat — de moment només hi ha un participant per completion, així
--- que només cal comparar amb `creada_per`; quan arribin els participants
--- múltiples (fase 3) caldrà revisar aquesta comprovació. Security definer
+-- Valida una completion 'pendent' (fase 2). El validador no pot ser cap
+-- PARTICIPANT (ni qui l'ha creat ni cap etiquetat, encara no hagi
+-- confirmat o ja ho hagi fet) — en una tasca compartida (fase 3) que
+-- cobreixi tota la família ja no cal ningú extern: es valida sola en
+-- confirmar l'últim (veure `confirmar_participacio`). Security definer
 -- perquè el client no necessita (ni té) una política d'UPDATE directa
 -- sobre `completions`: tota escriptura de validació passa per aquí.
 create or replace function public.validar_completion(p_completion_id uuid)
@@ -707,6 +768,7 @@ as $$
 declare
   v_usuari_id  uuid := auth.uid();
   v_completion public.completions%rowtype;
+  v_participant record;
 begin
   if v_usuari_id is null then
     raise exception 'Cal estar autenticat per validar una reclamació.';
@@ -725,8 +787,11 @@ begin
     raise exception 'Aquesta reclamació no pertany a la teva família.';
   end if;
 
-  if v_completion.creada_per = v_usuari_id then
-    raise exception 'No pots validar una reclamació que has creat tu mateix.';
+  if exists (
+    select 1 from public.participacions
+    where completion_id = p_completion_id and usuari_id = v_usuari_id
+  ) then
+    raise exception 'No pots validar una reclamació on ets participant.';
   end if;
 
   if v_completion.estat <> 'pendent' then
@@ -739,21 +804,147 @@ begin
   where id = p_completion_id
   returning * into v_completion;
 
-  -- Ratxa/escut/monedes són de qui ha FET la tasca (creada_per), no de qui
-  -- l'ha validat.
-  perform public.processar_punts_validats(
-    v_completion.creada_per, v_completion.familia_id, v_completion.id
-  );
+  -- Ratxa/escut/monedes són de cada participant CONFIRMAT (mai de qui
+  -- valida): en una tasca compartida en pot haver-hi més d'un. Els
+  -- participants encara no confirmats en aquest moment rebran el seu quan
+  -- confirmin (confirmar_participacio ho gestiona per a una completion ja
+  -- validada).
+  for v_participant in
+    select usuari_id from public.participacions
+    where completion_id = v_completion.id and confirmat = true
+  loop
+    perform public.processar_punts_validats(
+      v_participant.usuari_id, v_completion.familia_id, v_completion.id
+    );
+  end loop;
 
   return v_completion;
 end;
 $$;
 
 comment on function public.validar_completion(uuid) is
-  'Valida una completion pendent creada per un altre membre de la família (el creador no es pot autovalidar). Posa estat = ''validada'' i validada_per = auth.uid().';
+  'Valida una completion pendent creada per un altre membre de la família (cap participant es pot autovalidar). Posa estat = ''validada'' i validada_per = auth.uid(), i processa ratxa/monedes de cada participant ja confirmat.';
 
 revoke all on function public.validar_completion(uuid) from public;
 grant execute on function public.validar_completion(uuid) to authenticated;
+
+-- =====================================================================
+-- FUNCIÓ: confirmar_participacio
+-- =====================================================================
+-- Un membre etiquetat com a participant d'una tasca compartida (fase 3)
+-- confirma "sí, hi era" perquè els seus punts comptin. Dos casos:
+--   1. La completion encara és 'pendent': si amb aquesta confirmació TOTS
+--      els participants ja han confirmat i, entre tots, cobreixen la
+--      família sencera, no cal ningú extern — es valida sola aquí mateix
+--      (validada_per = qui acaba de confirmar) i es processa ratxa/monedes
+--      de tots els participants (cap n'havia rebut encara, la completion
+--      no era 'validada'). Si no cobreixen tota la família, es queda
+--      'pendent': algú que no hi participi l'haurà de validar amb
+--      `validar_completion` com sempre.
+--   2. La completion ja era 'validada' (algú extern l'ha validat mentre
+--      aquest participant encara no havia confirmat): només cal processar
+--      la ratxa/monedes d'aquest participant ara, ja que és el primer
+--      moment en què els seus punts compten de veritat.
+create or replace function public.confirmar_participacio(p_completion_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_usuari_id       uuid := auth.uid();
+  v_completion      public.completions%rowtype;
+  v_participacio    public.participacions%rowtype;
+  v_pendents        integer;
+  v_participants    integer;
+  v_membres_familia integer;
+  v_participant     record;
+begin
+  if v_usuari_id is null then
+    raise exception 'Cal estar autenticat per confirmar una participació.';
+  end if;
+
+  select * into v_completion
+  from public.completions
+  where id = p_completion_id
+  for update;
+
+  if not found then
+    raise exception 'Aquesta reclamació no existeix.';
+  end if;
+
+  if v_completion.familia_id <> public.familia_id_actual() then
+    raise exception 'Aquesta reclamació no pertany a la teva família.';
+  end if;
+
+  select * into v_participacio
+  from public.participacions
+  where completion_id = p_completion_id and usuari_id = v_usuari_id
+  for update;
+
+  if not found then
+    raise exception 'No estàs etiquetat com a participant d''aquesta reclamació.';
+  end if;
+
+  if v_participacio.confirmat then
+    raise exception 'Ja havies confirmat aquesta participació.';
+  end if;
+
+  update public.participacions
+  set confirmat = true
+  where completion_id = p_completion_id and usuari_id = v_usuari_id;
+
+  -- Cas 2: la completion ja comptava de veritat (algú extern ja l'havia
+  -- validada). Ara és el primer moment en què els punts d'aquest
+  -- participant compten.
+  if v_completion.estat = 'validada' then
+    perform public.processar_punts_validats(v_usuari_id, v_completion.familia_id, p_completion_id);
+    return;
+  end if;
+
+  -- Cas 1: encara 'pendent'. Comprova si ja no queda ningú per confirmar.
+  select count(*) into v_pendents
+  from public.participacions
+  where completion_id = p_completion_id and confirmat = false;
+
+  if v_pendents > 0 then
+    return;
+  end if;
+
+  select count(*) into v_participants
+  from public.participacions
+  where completion_id = p_completion_id;
+
+  select count(*) into v_membres_familia
+  from public.profiles
+  where familia_id = v_completion.familia_id;
+
+  -- Els participants (tots confirmats ara) no cobreixen tota la família:
+  -- queda algú de fora que l'ha de validar com sempre.
+  if v_participants < v_membres_familia then
+    return;
+  end if;
+
+  update public.completions
+  set estat = 'validada',
+      validada_per = v_usuari_id
+  where id = p_completion_id;
+
+  for v_participant in
+    select usuari_id from public.participacions where completion_id = p_completion_id
+  loop
+    perform public.processar_punts_validats(
+      v_participant.usuari_id, v_completion.familia_id, p_completion_id
+    );
+  end loop;
+end;
+$$;
+
+comment on function public.confirmar_participacio(uuid) is
+  'Un participant etiquetat confirma "hi era" en una tasca compartida. Si això completa la confirmació de tots els participants i cobreixen tota la família, valida la completion sola (sense caldre ningú extern) i processa ratxa/monedes de tothom; si la completion ja estava validada, només processa la ratxa/monedes d''aquest participant.';
+
+revoke all on function public.confirmar_participacio(uuid) from public;
+grant execute on function public.confirmar_participacio(uuid) to authenticated;
 
 -- =====================================================================
 -- FUNCIÓ: anullar_completion
