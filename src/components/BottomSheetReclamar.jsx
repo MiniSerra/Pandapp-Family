@@ -134,9 +134,16 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
       >
         <div className="mb-4 flex items-center gap-3">
           <span className="text-4xl">{activitat.emoji}</span>
-          <h2 className="font-display text-xl font-medium text-tinta">
-            {activitat.nom}
-          </h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-xl font-medium text-tinta">
+              {activitat.nom}
+            </h2>
+            {activitat.descripcio && (
+              <p className="mt-0.5 font-body text-sm text-tinta-sec">
+                {activitat.descripcio}
+              </p>
+            )}
+          </div>
         </div>
 
         {necessitaFoto && (
@@ -151,7 +158,6 @@ export default function BottomSheetReclamar({ activitat, onTancar, onExit }) {
               id="foto"
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleFitxer}
               className="block w-full text-sm text-tinta"
             />

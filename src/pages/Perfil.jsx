@@ -177,7 +177,6 @@ export default function Perfil() {
           ref={fitxerInputRef}
           type="file"
           accept="image/*"
-          capture="user"
           onChange={handleTriaFoto}
           className="hidden"
         />
