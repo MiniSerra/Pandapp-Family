@@ -45,6 +45,9 @@ function categoriesDeLesActivitats(activitats) {
 }
 
 const CLAU_VISTA = 'pandapp:vista-activitats'
+const BUCKET_AVATARS = 'avatars'
+// Prou perquè es vegin mentre es té la pantalla oberta (veure CLAUDE.md "Fotos").
+const CADUCITAT_URL_SIGNADA_S = 60 * 60
 
 // Historial que fem servir per pintar cooldowns i "fa temps". La veritat del
 // cooldown la decideix sempre reclamar_activitat al servidor; això és només
@@ -246,6 +249,7 @@ export default function Activitats() {
   const [completions, setCompletions] = useState([])
   const [perfils, setPerfils] = useState({})
   const [membresFamilia, setMembresFamilia] = useState([])
+  const [avatarUrls, setAvatarUrls] = useState({})
   const [ratxa, setRatxa] = useState(null)
   const [monedes, setMonedes] = useState(null)
   const [carregant, setCarregant] = useState(true)
@@ -290,7 +294,7 @@ export default function Activitats() {
         .eq('familia_id', profile.familia_id)
         .gte('created_at', desDe)
         .order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, nom'),
+      supabase.from('profiles').select('id, nom, avatar_url'),
       // ratxes/monedes encara poden no tenir fila (es creen soles la
       // primera vegada que es completa el llindar diari).
       supabase.from('ratxes').select('dies_seguits').eq('usuari_id', profile.id).maybeSingle(),
@@ -313,6 +317,17 @@ export default function Activitats() {
     setRatxa(ratxaRes.data ?? { dies_seguits: 0 })
     setMonedes(monedesRes.data ?? { saldo: 0 })
     setCarregant(false)
+
+    const ambAvatar = perfilsRes.data.filter((p) => p.avatar_url)
+    const entradesAvatars = await Promise.all(
+      ambAvatar.map(async (p) => {
+        const { data } = await supabase.storage
+          .from(BUCKET_AVATARS)
+          .createSignedUrl(p.avatar_url, CADUCITAT_URL_SIGNADA_S)
+        return [p.id, data?.signedUrl ?? null]
+      }),
+    )
+    setAvatarUrls(Object.fromEntries(entradesAvatars))
   }, [profile])
 
   useEffect(() => {
@@ -481,6 +496,7 @@ export default function Activitats() {
         <BottomSheetReclamar
           activitat={activitatSeleccionada}
           membresFamilia={membresFamilia}
+          avatarUrls={avatarUrls}
           onTancar={() => setActivitatSeleccionada(null)}
           onExit={gestionaExit}
         />

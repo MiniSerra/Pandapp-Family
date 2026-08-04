@@ -124,6 +124,9 @@ create table public.activitats (
   sostre              numeric not null default 1 check (sostre >= 1),
 
   -- --- flags de comportament ---
+  -- Ja no bloqueja res a reclamar_activitat ni a la interfície: qualsevol
+  -- activitat es pot compartir. Es manté la columna per si es fa servir
+  -- més endavant per suggerir quines val la pena compartir.
   compartible         boolean not null default false,
   -- Ja no bloqueja res a reclamar_activitat ni a la interfície: la foto
   -- sempre és opcional, per a totes les activitats (veure CLAUDE.md
@@ -679,14 +682,10 @@ begin
     end if;
   end if;
 
-  -- Tasques compartides: només activitats compartible = true. Es filtren
+  -- Tasques compartides: qualsevol activitat es pot compartir. Es filtren
   -- de p_participants_ids els ids que no pertanyin a la família o que
   -- coincideixin amb qui reclama (mai cal que el client ho faci bé).
   if p_participants_ids is not null and array_length(p_participants_ids, 1) > 0 then
-    if not v_activitat.compartible then
-      raise exception 'Aquesta activitat no es pot compartir amb altres participants.';
-    end if;
-
     select array_agg(id) into v_participants_valids
     from public.profiles
     where familia_id = v_familia_id

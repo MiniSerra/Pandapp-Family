@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { comprimirImatge } from '../lib/fotos'
 import { useAuth } from '../context/useAuth'
+import AvatarUsuari from './AvatarUsuari'
 
 const BUCKET = 'fotos-tasques'
 // Prou perquè el frontend passi la URL a reclamar_activitat just després de
@@ -10,7 +11,13 @@ const BUCKET = 'fotos-tasques'
 const CADUCITAT_URL_SIGNADA_S = 60 * 60
 const ERROR_CONNEXIO = 'Error de connexió. Torna-ho a provar.'
 
-export default function BottomSheetReclamar({ activitat, membresFamilia, onTancar, onExit }) {
+export default function BottomSheetReclamar({
+  activitat,
+  membresFamilia,
+  avatarUrls,
+  onTancar,
+  onExit,
+}) {
   const { profile } = useAuth()
   // 'idle' | 'comprimint' | 'pujant'
   const [fase, setFase] = useState('idle')
@@ -183,8 +190,8 @@ export default function BottomSheetReclamar({ activitat, membresFamilia, onTanca
           )}
         </div>
 
-        {activitat.compartible && membresFamilia?.length > 0 && (
-          <div className="mb-4">
+        {!activitat.es_personal && membresFamilia?.length > 0 && (
+          <div className="bisell mb-4 rounded-xl border border-vora bg-targeta p-3">
             <button
               type="button"
               onClick={() => {
@@ -193,41 +200,62 @@ export default function BottomSheetReclamar({ activitat, membresFamilia, onTanca
               }}
               className="flex w-full items-center justify-between"
             >
-              <span className="text-sm font-medium text-tinta-sec">Activitat compartida</span>
+              <span className="flex items-center gap-2 text-sm font-medium text-tinta">
+                <span className="text-lg">👥</span>
+                Activitat compartida
+              </span>
               <span
-                className={`relative h-6 w-11 rounded-full transition-colors ${
+                role="switch"
+                aria-checked={compartida}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                   compartida ? 'bg-panda' : 'bg-vora'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper transition-transform ${
-                    compartida ? 'translate-x-5' : 'translate-x-0.5'
+                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-tinta shadow transition-transform ${
+                    compartida ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
               </span>
             </button>
 
             {compartida && (
-              <div className="mt-3 space-y-2">
-                <p className="font-body text-xs text-tinta-sec">Qui més hi era?</p>
-                {membresFamilia.map((membre) => {
-                  const seleccionat = participantsSeleccionats.includes(membre.id)
-                  return (
-                    <button
-                      key={membre.id}
-                      type="button"
-                      onClick={() => handleAlternarParticipant(membre.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left font-body text-sm ${
-                        seleccionat
-                          ? 'border-panda bg-panda/10 text-tinta'
-                          : 'border-vora bg-targeta text-tinta-sec'
-                      }`}
-                    >
-                      {membre.nom}
-                      {seleccionat && <span className="text-panda">✓</span>}
-                    </button>
-                  )
-                })}
+              <div className="mt-3 border-t border-vora pt-3">
+                <p className="mb-2 font-body text-xs text-tinta-sec">
+                  Qui més hi era? ({participantsSeleccionats.length} seleccionat
+                  {participantsSeleccionats.length === 1 ? '' : 's'})
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {membresFamilia.map((membre) => {
+                    const seleccionat = participantsSeleccionats.includes(membre.id)
+                    return (
+                      <button
+                        key={membre.id}
+                        type="button"
+                        onClick={() => handleAlternarParticipant(membre.id)}
+                        className={`bisell flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-colors ${
+                          seleccionat ? 'border-panda bg-panda/10' : 'border-vora bg-paper'
+                        }`}
+                      >
+                        <div className="relative">
+                          <AvatarUsuari url={avatarUrls?.[membre.id]} nom={membre.nom} mida="sm" />
+                          {seleccionat && (
+                            <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full bg-panda text-[10px] text-paper">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`truncate font-body text-xs ${
+                            seleccionat ? 'text-tinta' : 'text-tinta-sec'
+                          }`}
+                        >
+                          {membre.nom}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>

@@ -181,8 +181,14 @@ Sense aquesta prima, cooperar sortiria a compte de no fer-ho mai.
 - L'etiquetat ha de **confirmar** ("sí, hi era") perquè els punts s'abonin.
 - El **validador no pot ser cap participant** (ni qui ha reclamat ni cap
   etiquetat, hagi confirmat o no).
-- Camp `compartible` per activitat. Fer el llit, posar menjar al gat o llegir **no**
-  són compartibles. Regla: si la tasca no es fa realment més ràpida entre dos, no ho és.
+- **Qualsevol activitat no personal es pot compartir** (canviat més tard a
+  fase 3: al principi es va limitar amb un camp `compartible`, però es va
+  obrir a totes perquè la família ho volia servir més lliurement). Les
+  **personals queden excloses**: el seu límit de 60 punts/dia es calcula
+  sobre els punts abans de repartir, no sobre la part de qui reclama, i
+  compartir-les el trencaria. `activitats.compartible` es manté a la taula
+  sense fer-hi res (com `requereix_foto`), per si es fa servir més endavant
+  per suggerir quines val la pena compartir.
 - **Arrodoniment avall** per persona; el residu (pot menys la suma repartida)
   se l'emporta qui ha reclamat (`es_qui_puja`).
 - L'objectiu col·lectiu suma el **pot sencer**, no la part de cadascú.
