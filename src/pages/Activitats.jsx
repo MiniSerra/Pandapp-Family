@@ -7,34 +7,13 @@ import BlocActivitat from '../components/BlocActivitat'
 import BottomSheetReclamar from '../components/BottomSheetReclamar'
 import IndicadorsJugador from '../components/IndicadorsJugador'
 
-const ORDRE_CATEGORIES = [
-  'casa',
-  'cuina',
-  'bany',
-  'roba',
-  'panda',
-  'compres',
-  'manteniment',
-  'personals',
-  'familiars',
-]
-
-const NOM_CATEGORIES = {
-  casa: 'Casa',
-  cuina: 'Cuina',
-  bany: 'Bany',
-  roba: 'Roba',
-  panda: 'Panda',
-  compres: 'Compres',
-  manteniment: 'Manteniment',
-  personals: 'Personals',
-  familiars: 'Familiars',
-}
-
-// Xips de categoria: ordre i emoji propis, diferents de l'ordre de les
-// seccions de la llista (aquí el Panda va primer).
-const CATEGORIA_CHIPS = [
-  { id: 'tot', nom: 'Tot', emoji: null },
+// Ordre i aparença preferits per a les categories conegudes — el mateix
+// per als xips i per a l'agrupació de la llista, ja no dues llistes que es
+// puguin desincronitzar. Si `activitats.categoria` porta mai un valor que
+// no hi és (una categoria nova al catàleg que encara no s'ha afegit aquí),
+// `categoriesDeLActivitats` de sota la hi afegeix igualment al final en
+// lloc de fer-la desaparèixer silenciosament de tot filtre visual.
+const CATEGORIES_CONEGUDES = [
   { id: 'panda', nom: 'Panda', emoji: '🐾' },
   { id: 'cuina', nom: 'Cuina', emoji: '🍳' },
   { id: 'bany', nom: 'Bany', emoji: '🚿' },
@@ -44,7 +23,26 @@ const CATEGORIA_CHIPS = [
   { id: 'manteniment', nom: 'Manteniment', emoji: '🔧' },
   { id: 'personals', nom: 'Personals', emoji: '💪' },
   { id: 'familiars', nom: 'Familiars', emoji: '👨‍👩‍👧' },
+  { id: 'jardi', nom: 'Jardí', emoji: '🌱' },
+  { id: 'fe', nom: 'Fe', emoji: '🙏' },
 ]
+
+function capitalitza(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+// Les categories que realment existeixen a les activitats carregades,
+// conegudes primer (en l'ordre de CATEGORIES_CONEGUDES) i qualsevol altra
+// (encara sense emoji/etiqueta pròpia) després, ordenada alfabèticament.
+function categoriesDeLesActivitats(activitats) {
+  const presents = new Set(activitats.map((act) => act.categoria))
+  const conegudes = CATEGORIES_CONEGUDES.filter((cat) => presents.has(cat.id))
+  const desconegudes = [...presents]
+    .filter((id) => !CATEGORIES_CONEGUDES.some((cat) => cat.id === id))
+    .sort()
+    .map((id) => ({ id, nom: capitalitza(id), emoji: null }))
+  return [...conegudes, ...desconegudes]
+}
 
 const CLAU_VISTA = 'pandapp:vista-activitats'
 
@@ -216,10 +214,12 @@ function BarraCercaIVista({ cerca, onCerca, vista, onVista }) {
   )
 }
 
-function XipsCategoria({ actiu, onCanvia }) {
+function XipsCategoria({ categories, actiu, onCanvia }) {
+  const chips = [{ id: 'tot', nom: 'Tot', emoji: null }, ...categories]
+
   return (
     <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3">
-      {CATEGORIA_CHIPS.map((chip) => {
+      {chips.map((chip) => {
         const seleccionat = actiu === chip.id
         return (
           <button
@@ -333,6 +333,8 @@ export default function Activitats() {
     return mapa
   }, [completions, activitats, profile])
 
+  const categories = useMemo(() => categoriesDeLesActivitats(activitats), [activitats])
+
   const activitatsFiltrades = useMemo(() => {
     let resultat = activitats
 
@@ -358,16 +360,15 @@ export default function Activitats() {
     }
 
     const grups = {}
-    for (const cat of ORDRE_CATEGORIES) grups[cat] = []
+    for (const cat of categories) grups[cat.id] = []
     for (const act of activitatsFiltrades) {
       grups[act.categoria]?.push(act)
     }
 
-    return ORDRE_CATEGORIES.filter((cat) => grups[cat].length > 0).map((cat) => ({
-      categoria: cat,
-      activitats: grups[cat],
-    }))
-  }, [activitatsFiltrades, categoriaActiva])
+    return categories
+      .filter((cat) => grups[cat.id].length > 0)
+      .map((cat) => ({ categoria: cat.id, nomCategoria: cat.nom, activitats: grups[cat.id] }))
+  }, [activitatsFiltrades, categoriaActiva, categories])
 
   // Fase 2: una completion 'pendent' (validació creuada) encara no compta
   // al progrés del dia, encara que ja s'hagi reclamat.
@@ -426,7 +427,7 @@ export default function Activitats() {
       </div>
 
       <BarraCercaIVista cerca={cerca} onCerca={setCerca} vista={vista} onVista={setVista} />
-      <XipsCategoria actiu={categoriaActiva} onCanvia={setCategoriaActiva} />
+      <XipsCategoria categories={categories} actiu={categoriaActiva} onCanvia={setCategoriaActiva} />
 
       {seccions.length === 0 && (
         <p className="px-4 py-10 text-center text-sm text-tinta-sec">
@@ -438,7 +439,7 @@ export default function Activitats() {
         <section key={seccio.categoria ?? 'filtrada'} className="px-4 py-3">
           {seccio.categoria && (
             <h2 className="mb-2 font-display text-xs font-medium uppercase tracking-wide text-tinta-sec">
-              {NOM_CATEGORIES[seccio.categoria]}
+              {seccio.nomCategoria}
             </h2>
           )}
 

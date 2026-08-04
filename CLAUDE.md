@@ -421,12 +421,24 @@ funció com `reclamar_activitat`. Definides a `supabase/likes.sql` i
 
 ## Categories del catàleg
 
-`casa` · `cuina` · `bany` · `roba` · `panda` · `compres` · `manteniment` ·
-`personals` · `familiars`
+`panda` · `cuina` · `bany` · `roba` · `casa` · `compres` · `manteniment` ·
+`personals` · `familiars` · `jardi` (🌱 Jardí) · `fe` (🙏 Fe)
 
-El catàleg complet (66 activitats) ja està carregat via `supabase/seed.sql`. La
+El catàleg complet ja està carregat via `supabase/seed.sql` (ampliat més
+endavant amb `jardi` i `fe` — la restricció CHECK de `activitats.categoria`
+s'ha d'ampliar manualment cada vegada que s'afegeix una categoria nova). La
 llista llarga es gestiona a la **interfície**, agrupant per categories i ordenant
 per urgència — no es retalla el catàleg.
+
+**Important:** els xips de categoria i l'agrupació visual de la llista
+(`Activitats.jsx`) es deriven de les categories que **realment existeixen**
+a les activitats carregades, mai d'una llista fixa: `CATEGORIES_CONEGUDES`
+només dona l'ordre i l'emoji preferits, però qualsevol categoria present a
+la base de dades que no hi surti es mostra igualment (al final, amb un
+nom capitalitzat i sense emoji) en lloc de desaparèixer en silenci de tot
+filtre visual. Si afegeixes una categoria nova, l'única actualització
+opcional és afegir-la a `CATEGORIES_CONEGUDES` per donar-li emoji i posició
+— sense fer-ho, ja funciona igualment.
 
 ---
 
