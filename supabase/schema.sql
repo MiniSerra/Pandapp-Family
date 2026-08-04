@@ -2,10 +2,11 @@
 -- Pandapp Family — esquema Fase 1
 -- =====================================================================
 -- Taules incloses: families, profiles, activitats, completions,
--- participacions.
+-- participacions, monedes, ratxes. La taula `likes` viu a
+-- supabase/likes.sql (fase 2, sense cap dependència d'aquest fitxer).
 --
--- Fora d'abast en aquest fitxer (fases posteriors): likes, propostes,
--- vots, torns, monedes, recompenses, bescanvis, resums.
+-- Fora d'abast en aquest fitxer (fases posteriors): propostes, vots,
+-- torns, recompenses, bescanvis, resums.
 --
 -- Decisions de disseny rellevants (veure CLAUDE.md):
 --   - RLS activat a totes les taules; regla base: només la teva família.
@@ -212,6 +213,42 @@ comment on table public.participacions is
 create index idx_participacions_usuari on public.participacions (usuari_id);
 
 -- =====================================================================
+-- TAULA: monedes
+-- =====================================================================
+-- Segona moneda (fase 3, veure CLAUDE.md "Dues monedes"): es guanya
+-- alhora que els punts i es gastarà en recompenses reals (peça
+-- posterior). El client MAI hi escriu directament: només es modifica
+-- des de `processar_punts_validats`.
+create table public.monedes (
+  usuari_id uuid primary key references public.profiles (id) on delete cascade,
+  saldo     integer not null default 0 check (saldo >= 0)
+);
+
+comment on table public.monedes is
+  'Saldo de monedes bescanviables (fase 3). Només es modifica des de processar_punts_validats; el client no hi insereix ni actualitza directament.';
+
+-- =====================================================================
+-- TAULA: ratxes
+-- =====================================================================
+-- Ratxa de dies complerts per usuari (fase 3, veure CLAUDE.md "Ratxes").
+-- Igual que `monedes`, el client MAI hi escriu directament.
+create table public.ratxes (
+  usuari_id           uuid primary key references public.profiles (id) on delete cascade,
+  dies_seguits        integer not null default 0 check (dies_seguits >= 0),
+  -- data local (Europe/Madrid), NO timestamptz: una ratxa és per dies de
+  -- calendari, no per instants. Null si encara no s'ha completat mai cap dia.
+  ultim_dia_complert  date,
+  -- un dia de gràcia al mes que evita perdre la ratxa si es trenca.
+  escut_disponible    boolean not null default true,
+  -- data local del dia en què es va gastar l'escut (per saber quan
+  -- resetejar-lo al canviar de mes). Null si encara no s'ha gastat mai.
+  escut_usat_mes      date
+);
+
+comment on table public.ratxes is
+  'Ratxa de dies complerts per usuari (fase 3). ultim_dia_complert i escut_usat_mes són dates locals d''Europe/Madrid. Només es modifica des de processar_punts_validats.';
+
+-- =====================================================================
 -- FUNCIÓ AUXILIAR: familia_id de l'usuari autenticat
 -- =====================================================================
 -- SECURITY DEFINER perquè les polítiques RLS d'altres taules (i de la
@@ -311,6 +348,177 @@ revoke all on function public.handle_new_user() from public;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- =====================================================================
+-- FUNCIÓ AUXILIAR: processar_punts_validats
+-- =====================================================================
+-- Es crida sempre que els punts d'una completion passen a comptar de
+-- veritat: al final de `reclamar_activitat` quan neix ja 'validada'
+-- (activitats personals), i al final de `validar_completion` quan un
+-- altre membre la valida. Gestiona la ratxa/escut i les monedes de QUI HA
+-- FET la tasca (`creada_per`), no de qui l'ha validat. Funció interna:
+-- no s'exposa via RPC (no hi ha `grant ... to authenticated`), només la
+-- criden altres funcions security definer.
+--
+-- Lògica (veure CLAUDE.md "Ratxes"): només actua quan aquesta completion
+-- és la que fa arribar la suma de punts validats d'avui al
+-- `llindar_diari` per primera vegada avui. Si `ultim_dia_complert` és
+-- ahir, la ratxa continua; si és avui mateix, no fa res (ja processat);
+-- si no és cap dels dos, es trenca (dies_seguits = 1) tret que hi hagi
+-- escut disponible, que la manté i es gasta. El primer dia complert de
+-- sempre (ultim_dia_complert null) tampoc gasta escut.
+create or replace function public.processar_punts_validats(
+  p_usuari_id uuid,
+  p_familia_id uuid,
+  p_completion_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_llindar                integer;
+  v_punts_completion        integer;
+  v_punts_avui_total        integer;
+  v_punts_avui_abans        integer;
+  v_avui                    date;
+  v_ahir                    date;
+  v_ratxa                   public.ratxes%rowtype;
+  v_dies_seguits_nous        integer;
+  v_monedes_guanyades        integer;
+  v_bonus_ratxa              integer;
+  v_bonus_fita               integer;
+  v_bonus_total              integer;
+  v_activitat_bonus_id       uuid;
+  v_activitat_bonus_versio   integer;
+  v_completion_bonus         public.completions%rowtype;
+begin
+  v_avui := (now() at time zone 'Europe/Madrid')::date;
+  v_ahir := v_avui - 1;
+
+  select coalesce(sum(punts_assignats), 0) into v_punts_completion
+  from public.participacions
+  where completion_id = p_completion_id and usuari_id = p_usuari_id;
+
+  select llindar_diari into v_llindar
+  from public.profiles
+  where id = p_usuari_id;
+
+  select coalesce(sum(part.punts_assignats), 0) into v_punts_avui_total
+  from public.participacions part
+  join public.completions comp on comp.id = part.completion_id
+  where part.usuari_id = p_usuari_id
+    and comp.estat = 'validada'
+    and comp.created_at >= public.inici_periode_local('day');
+
+  v_punts_avui_abans := v_punts_avui_total - v_punts_completion;
+
+  -- Només actua si aquesta completion és la que creua el llindar avui.
+  if not (v_punts_avui_abans < v_llindar and v_punts_avui_total >= v_llindar) then
+    return;
+  end if;
+
+  insert into public.ratxes (usuari_id) values (p_usuari_id)
+  on conflict (usuari_id) do nothing;
+
+  select * into v_ratxa
+  from public.ratxes
+  where usuari_id = p_usuari_id
+  for update;
+
+  -- Reset mensual de l'escut (sense cron encara: es comprova aquí mateix,
+  -- abans de decidir si es fa servir més avall).
+  if v_ratxa.escut_usat_mes is not null
+     and v_ratxa.escut_usat_mes < date_trunc('month', v_avui)::date then
+    v_ratxa.escut_disponible := true;
+  end if;
+
+  if v_ratxa.ultim_dia_complert = v_avui then
+    return; -- ja processat avui (no hauria de passar; evita duplicar-ho).
+  elsif v_ratxa.ultim_dia_complert = v_ahir then
+    v_dies_seguits_nous := v_ratxa.dies_seguits + 1;
+  elsif v_ratxa.ultim_dia_complert is null then
+    v_dies_seguits_nous := 1;
+  elsif v_ratxa.escut_disponible then
+    v_dies_seguits_nous := v_ratxa.dies_seguits + 1;
+    v_ratxa.escut_disponible := false;
+    v_ratxa.escut_usat_mes := v_avui;
+  else
+    v_dies_seguits_nous := 1;
+  end if;
+
+  update public.ratxes
+  set dies_seguits = v_dies_seguits_nous,
+      ultim_dia_complert = v_avui,
+      escut_disponible = v_ratxa.escut_disponible,
+      escut_usat_mes = v_ratxa.escut_usat_mes
+  where usuari_id = p_usuari_id;
+
+  -- Monedes: 1 per cada 10 punts d'AQUESTA completion (arrodonit avall).
+  v_monedes_guanyades := floor(v_punts_completion / 10.0)::integer;
+
+  if v_monedes_guanyades > 0 then
+    insert into public.monedes (usuari_id, saldo)
+    values (p_usuari_id, v_monedes_guanyades)
+    on conflict (usuari_id) do update
+      set saldo = monedes.saldo + excluded.saldo;
+  end if;
+
+  -- Bonus de ratxa (suma fixa, mai multiplicador) + fites del CLAUDE.md.
+  v_bonus_ratxa := least(5 * v_dies_seguits_nous, 50);
+  v_bonus_fita := case v_dies_seguits_nous
+    when 7 then 100
+    when 14 then 200
+    when 30 then 500
+    else 0
+  end;
+  v_bonus_total := v_bonus_ratxa + v_bonus_fita;
+
+  if v_bonus_total > 0 then
+    -- Activitat de sistema per registrar el bonus com a completion: es
+    -- crea una vegada per família (idempotent via l'unique existent a
+    -- activitats) i es queda 'retirada' perquè no aparegui al catàleg ni
+    -- es pugui reclamar a mà.
+    insert into public.activitats (
+      familia_id, categoria, nom, emoji, descripcio,
+      punts_base, cooldown_h, periode_normal_h, k_dia, sostre,
+      compartible, requereix_foto, es_personal, es_torn, estat
+    ) values (
+      p_familia_id, 'personals', 'Bonus de ratxa', '🔥',
+      'Bonus automàtic per mantenir la ratxa o assolir una fita. El crea el sistema; no es pot reclamar a mà.',
+      1, 0, 0, 0, 1, false, false, true, false, 'retirada'
+    )
+    on conflict (familia_id, nom) do nothing;
+
+    select id, versio into v_activitat_bonus_id, v_activitat_bonus_versio
+    from public.activitats
+    where familia_id = p_familia_id and nom = 'Bonus de ratxa';
+
+    insert into public.completions (
+      activitat_id, familia_id, creada_per,
+      versio_punts, punts_base_snapshot, pot_total,
+      foto_url, thumb_url, estat
+    ) values (
+      v_activitat_bonus_id, p_familia_id, p_usuari_id,
+      v_activitat_bonus_versio, v_bonus_total, v_bonus_total,
+      null, null, 'validada'
+    )
+    returning * into v_completion_bonus;
+
+    insert into public.participacions (
+      completion_id, usuari_id, punts_assignats, confirmat, es_qui_puja
+    ) values (
+      v_completion_bonus.id, p_usuari_id, v_bonus_total, true, true
+    );
+  end if;
+end;
+$$;
+
+comment on function public.processar_punts_validats(uuid, uuid, uuid) is
+  'Es crida quan els punts d''una completion compten de veritat. Actualitza ratxa/escut i monedes de qui ha fet la tasca, i crea una completion "Bonus de ratxa" si escau. Ús intern, no exposada via RPC.';
+
+revoke all on function public.processar_punts_validats(uuid, uuid, uuid) from public;
 
 -- =====================================================================
 -- FUNCIÓ: reclamar_activitat
@@ -439,6 +647,10 @@ begin
     v_completion.id, v_usuari_id, v_punts_calculats, true, true
   );
 
+  if v_estat_inicial = 'validada' then
+    perform public.processar_punts_validats(v_usuari_id, v_familia_id, v_completion.id);
+  end if;
+
   return v_completion;
 end;
 $$;
@@ -498,6 +710,12 @@ begin
       validada_per = v_usuari_id
   where id = p_completion_id
   returning * into v_completion;
+
+  -- Ratxa/escut/monedes són de qui ha FET la tasca (creada_per), no de qui
+  -- l'ha validat.
+  perform public.processar_punts_validats(
+    v_completion.creada_per, v_completion.familia_id, v_completion.id
+  );
 
   return v_completion;
 end;
@@ -573,6 +791,8 @@ alter table public.profiles enable row level security;
 alter table public.activitats enable row level security;
 alter table public.completions enable row level security;
 alter table public.participacions enable row level security;
+alter table public.monedes enable row level security;
+alter table public.ratxes enable row level security;
 
 -- ---- families -------------------------------------------------------
 -- Només es pot llegir la pròpia família. La creació/edició de families
@@ -642,3 +862,38 @@ create policy "participacions: veure la família" on public.participacions
 -- No hi ha política d'INSERT ni DELETE per a `authenticated`: la creació
 -- passa sempre per `reclamar_activitat` i l'esborrat en cascada per
 -- `anullar_completion` (security definer, salten la RLS).
+
+-- ---- monedes -------------------------------------------------------
+-- Es pot veure el saldo de qualsevol membre de la família (útil per a
+-- recompenses compartides, fase 3).
+create policy "monedes: veure la família" on public.monedes
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = monedes.usuari_id
+        and p.familia_id = public.familia_id_actual()
+    )
+  );
+
+-- No hi ha política d'INSERT ni UPDATE per a `authenticated`: només
+-- `processar_punts_validats` (security definer) hi escriu.
+
+-- ---- ratxes -------------------------------------------------------
+-- Es pot veure la ratxa de qualsevol membre de la família.
+create policy "ratxes: veure la família" on public.ratxes
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = ratxes.usuari_id
+        and p.familia_id = public.familia_id_actual()
+    )
+  );
+
+-- No hi ha política d'INSERT ni UPDATE per a `authenticated`: només
+-- `processar_punts_validats` (security definer) hi escriu.
