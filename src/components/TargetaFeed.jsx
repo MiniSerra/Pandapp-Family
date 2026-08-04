@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { faTempsPrecis, esPotAnullar } from '../lib/temps'
 import IconaCor from './IconaCor'
 import IconaPapereta from './IconaPapereta'
@@ -34,6 +34,8 @@ export default function TargetaFeed({
   const [errorEliminar, setErrorEliminar] = useState('')
   const [confirmantParticipacio, setConfirmantParticipacio] = useState(false)
   const [errorParticipacio, setErrorParticipacio] = useState('')
+  const [mostrarCorAnimat, setMostrarCorAnimat] = useState(false)
+  const ultimTapFotoRef = useRef(0)
 
   const activitat = completion.activitats
   const pendent = completion.estat === 'pendent'
@@ -80,6 +82,25 @@ export default function TargetaFeed({
     if (err) setErrorParticipacio(err.message)
   }
 
+  // Doble tap sobre la foto = alternar like (mateix comportament que el
+  // cor de la fila d'accions). Detecció manual per dos taps consecutius en
+  // lloc de `onDoubleClick`, que al mòbil no es dispara de manera fiable
+  // amb un doble toc. L'animació del cor gros només es mostra quan el tap
+  // AFEGEIX el like, mai quan el treu.
+  function handleTapFoto() {
+    const ara = Date.now()
+    const esDobleTap = ara - ultimTapFotoRef.current < 300
+    ultimTapFotoRef.current = esDobleTap ? 0 : ara
+
+    if (!esDobleTap) return
+
+    if (!jaLiked) {
+      setMostrarCorAnimat(true)
+      setTimeout(() => setMostrarCorAnimat(false), 700)
+    }
+    onAlternarLike(completion.id)
+  }
+
   return (
     <article className="bisell relative overflow-hidden rounded-2xl border border-vora bg-targeta">
       {potEliminar && (
@@ -110,18 +131,70 @@ export default function TargetaFeed({
         </span>
       </div>
 
-      {fotoUrl ? (
-        <img src={fotoUrl} alt="" className="aspect-square w-full object-cover" />
-      ) : (
-        <div className="flex aspect-square w-full items-center justify-center bg-paper">
-          <span className="text-7xl">{activitat?.emoji}</span>
-        </div>
-      )}
+      <div className="relative touch-manipulation select-none" onClick={handleTapFoto}>
+        {fotoUrl ? (
+          <img src={fotoUrl} alt="" className="aspect-square w-full object-cover" />
+        ) : (
+          <div className="flex aspect-square w-full items-center justify-center bg-paper">
+            <span className="text-7xl">{activitat?.emoji}</span>
+          </div>
+        )}
+
+        {mostrarCorAnimat && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="animacio-cor-doble-tap text-panda drop-shadow-lg">
+              <IconaCor ple mida={96} />
+            </span>
+          </div>
+        )}
+      </div>
 
       <div className="p-4">
-        {participantsConfirmats.length > 0 && (
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex -space-x-2">
+        {(pendent || necessitoConfirmarParticipacio || participantsPendents.length > 0) && (
+          <div className="mb-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {pendent && (
+                <span className="rounded-full border border-vora bg-vora px-2 py-0.5 font-body text-xs text-tinta-sec">
+                  pendent de validar
+                </span>
+              )}
+              {potValidar && (
+                <button
+                  type="button"
+                  onClick={handleConfirmar}
+                  disabled={validant}
+                  className="rounded-md bg-panda px-3 py-1.5 font-body text-sm font-medium text-paper disabled:opacity-50"
+                >
+                  {validant ? 'Confirmant…' : 'Confirmar'}
+                </button>
+              )}
+              {necessitoConfirmarParticipacio && (
+                <button
+                  type="button"
+                  onClick={handleConfirmarParticipacio}
+                  disabled={confirmantParticipacio}
+                  className="rounded-md bg-panda px-3 py-1.5 font-body text-sm font-medium text-paper disabled:opacity-50"
+                >
+                  {confirmantParticipacio ? 'Confirmant…' : 'Sí, hi era'}
+                </button>
+              )}
+              {pendent && socJoQuiLHaFet && (
+                <span className="font-body text-xs text-tinta-sec">Esperant confirmació</span>
+              )}
+            </div>
+
+            {participantsPendents.length > 0 && (
+              <p className="font-body text-xs text-tebi">
+                {participantsPendents.map((p) => perfils[p.usuari_id] ?? 'algú').join(', ')}{' '}
+                {participantsPendents.length === 1 ? 'encara ha' : 'encara han'} de confirmar
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          {participantsConfirmats.length > 0 && (
+            <div className="flex shrink-0 -space-x-2">
               {participantsConfirmats.map((p) => (
                 <div key={p.usuari_id} className="rounded-full ring-2 ring-targeta">
                   <AvatarUsuari
@@ -132,51 +205,11 @@ export default function TargetaFeed({
                 </div>
               ))}
             </div>
-            <p className="font-body text-xs text-tinta-sec">
-              {fetPerText(participantsConfirmats.map((p) => perfils[p.usuari_id] ?? 'algú'))}
-            </p>
-          </div>
-        )}
-
-        {participantsPendents.length > 0 && (
-          <p className="mb-3 font-body text-xs text-tebi">
-            {participantsPendents.map((p) => perfils[p.usuari_id] ?? 'algú').join(', ')}{' '}
-            {participantsPendents.length === 1 ? 'encara ha' : 'encara han'} de confirmar
+          )}
+          <p className="min-w-0 flex-1 truncate font-body text-xs text-tinta-sec">
+            {participantsConfirmats.length > 0 &&
+              fetPerText(participantsConfirmats.map((p) => perfils[p.usuari_id] ?? 'algú'))}
           </p>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {pendent && (
-              <span className="rounded-full border border-vora bg-vora px-2 py-0.5 font-body text-xs text-tinta-sec">
-                pendent de validar
-              </span>
-            )}
-            {potValidar && (
-              <button
-                type="button"
-                onClick={handleConfirmar}
-                disabled={validant}
-                className="rounded-md bg-panda px-3 py-1.5 font-body text-sm font-medium text-paper disabled:opacity-50"
-              >
-                {validant ? 'Confirmant…' : 'Confirmar'}
-              </button>
-            )}
-            {necessitoConfirmarParticipacio && (
-              <button
-                type="button"
-                onClick={handleConfirmarParticipacio}
-                disabled={confirmantParticipacio}
-                className="rounded-md bg-panda px-3 py-1.5 font-body text-sm font-medium text-paper disabled:opacity-50"
-              >
-                {confirmantParticipacio ? 'Confirmant…' : 'Sí, hi era'}
-              </button>
-            )}
-            {pendent && socJoQuiLHaFet && (
-              <span className="font-body text-xs text-tinta-sec">Esperant confirmació</span>
-            )}
-          </div>
-
           <button
             type="button"
             onClick={() => onAlternarLike(completion.id)}
