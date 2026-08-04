@@ -239,6 +239,16 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   renombren encara que la reclamació tingui èxit — l'únic que verifiquen les
   polítiques de RLS (`supabase/storage.sql`) és que el primer segment de la
   ruta sigui la `familia_id` de qui puja/llegeix.
+- **Bucket privat `avatars` (fase 3).** Un sol fitxer per usuari, sempre a
+  `{familia_id}/{usuari_id}.webp`, sobreescrit amb `upload(..., { upsert: true })`
+  en lloc d'acumular-se com a `fotos-tasques`. Com que aquí la ruta sí
+  identifica exactament de qui és l'avatar, `supabase/avatars.sql` exigeix
+  que `INSERT`/`UPDATE` coincideixin amb tota la ruta pròpia, no només amb
+  el primer segment (`familia_id`). `profiles.avatar_url` guarda la
+  **ruta** (no una URL signada): es torna a signar cada vegada que es
+  llegeix, a `Perfil.jsx`. Només cal comprimir el thumb de 300px, no
+  l'original de 1080px. El bucket el crea l'admin manualment des del
+  panell, igual que `fotos-tasques`.
 - **URLs signades:** es generen amb `createSignedUrl`, caducitat de 60 minuts.
   N'hi ha prou perquè `reclamar_activitat` les guardi a `foto_url`/`thumb_url`
   just després de pujar; el feed i el perfil n'hauran de generar una de nova
@@ -377,8 +387,12 @@ per urgència — no es retalla el catàleg.
 - **S'obre 20 segons, cinc cops al dia, dret a la cuina.** Llegible de reüll i
   amb una mà. Res de text gris clar ni tipografies fines.
 - **La llista és l'app.** En obrir-la, la llista d'activitats ordenada per
-  urgència amb el progrés del dia a dalt. Rànquings i perfil en pestanyes
-  inferiors. Res de pantalla d'inici amb resum ni de graella de targetes.
+  urgència amb el progrés del dia a dalt. Res de pantalla d'inici amb resum
+  ni de graella de targetes.
+- **Navegació inferior (implementada):** quatre pestanyes fixes —
+  **Activitats** (la llista, pestanya per defecte), **Feed**, **Rànquing** i
+  **Perfil** — amb bisell metàl·lic a la pestanya activa (`src/App.jsx`,
+  sense router).
 - **Negre pur (OLED), mode fosc per defecte** segons preferència del sistema
   (`prefers-color-scheme`). No hi ha selector manual clar/fosc a la fase 1.
 - **Minimalista amb un únic detall d'acabat**: el bisell metàl·lic de les
@@ -511,8 +525,9 @@ d'una categoria concreta).
    qui no l'ha creada, likes (taula `likes`, sense donar punts).
 3. **Fase 3 (en curs):** ratxes i monedes **fetes** (`processar_punts_validats`,
    cridada des de `reclamar_activitat`/`validar_completion`; indicadors 🔥/🪙 a
-   la capçalera d'Activitats). **Pendent:** recompenses, tasques compartides,
-   estat del Panda.
+   la capçalera d'Activitats). Pestanya **Perfil feta**: avatar (bucket
+   `avatars`), historial paginat de les pròpies completions. **Pendent:**
+   recompenses, tasques compartides, estat del Panda.
 4. **Fase 4:** propostes i votacions, resums amb Gemini, notificacions push.
 
 **No implementis res de fases posteriors sense que s'hagi demanat explícitament.**
