@@ -476,10 +476,13 @@ create trigger on_auth_user_created
 -- no s'exposa via RPC (no hi ha `grant ... to authenticated`), només la
 -- criden altres funcions security definer.
 --
--- Lògica (veure CLAUDE.md "Ratxes"): només actua quan aquesta completion
--- és la que fa arribar la suma de punts validats d'avui al
--- `llindar_diari` per primera vegada avui. Si `ultim_dia_complert` és
--- ahir, la ratxa continua; si és avui mateix, no fa res (ja processat);
+-- Lògica (veure CLAUDE.md "Ratxes" i "Dues monedes"): les MONEDES es donen
+-- sempre, 1 per cada 10 punts d'aquesta completion — "es guanyen alhora
+-- que els punts", cada vegada, no només el dia que es creua el llindar.
+-- La RATXA sí que segueix sent només un cop al dia: només avança quan
+-- aquesta completion és la que fa arribar la suma de punts validats
+-- d'avui al `llindar_diari` per primera vegada avui. Si `ultim_dia_complert`
+-- és ahir, la ratxa continua; si és avui mateix, no fa res (ja processat);
 -- si no és cap dels dos, es trenca (dies_seguits = 1) tret que hi hagi
 -- escut disponible, que la manté i es gasta. El primer dia complert de
 -- sempre (ultim_dia_complert null) tampoc gasta escut.
@@ -516,6 +519,18 @@ begin
   select coalesce(sum(punts_assignats), 0) into v_punts_completion
   from public.participacions
   where completion_id = p_completion_id and usuari_id = p_usuari_id;
+
+  -- Monedes: 1 per cada 10 punts d'AQUESTA completion (arrodonit avall),
+  -- SEMPRE — independent del llindar diari, a diferència de la ratxa de
+  -- sota.
+  v_monedes_guanyades := floor(v_punts_completion / 10.0)::integer;
+
+  if v_monedes_guanyades > 0 then
+    insert into public.monedes (usuari_id, saldo)
+    values (p_usuari_id, v_monedes_guanyades)
+    on conflict (usuari_id) do update
+      set saldo = monedes.saldo + excluded.saldo;
+  end if;
 
   select llindar_diari into v_llindar
   from public.profiles
@@ -570,16 +585,6 @@ begin
       escut_disponible = v_ratxa.escut_disponible,
       escut_usat_mes = v_ratxa.escut_usat_mes
   where usuari_id = p_usuari_id;
-
-  -- Monedes: 1 per cada 10 punts d'AQUESTA completion (arrodonit avall).
-  v_monedes_guanyades := floor(v_punts_completion / 10.0)::integer;
-
-  if v_monedes_guanyades > 0 then
-    insert into public.monedes (usuari_id, saldo)
-    values (p_usuari_id, v_monedes_guanyades)
-    on conflict (usuari_id) do update
-      set saldo = monedes.saldo + excluded.saldo;
-  end if;
 
   -- Bonus de ratxa (suma fixa, mai multiplicador) + fites del CLAUDE.md.
   v_bonus_ratxa := least(5 * v_dies_seguits_nous, 50);
@@ -1190,16 +1195,18 @@ grant execute on function public.bescanviar_recompensa(uuid) to authenticated;
 -- Si la completion ja estava 'validada' (processar_punts_validats ja s'hi
 -- havia executat), cal revertir monedes/ratxa abans d'esborrar-la, si no
 -- l'usuari es queda amb monedes o dies de ratxa que ja no corresponen a cap
--- completion real. Es recalcula, amb l'estat actual (encara inclou aquesta
--- completion), si aquesta era la que feia creuar el llindar diari — igual
--- que fa processar_punts_validats, excloent-hi sempre les completions de
--- "Bonus de ratxa" (no són feina real feta, no han de comptar ni per
--- decidir el creuament ni per revertir-lo). Aproximació de fase 3 (veure
--- CLAUDE.md "Validació de tasques"): dins la finestra de 15 minuts és
--- raonable assumir que no ha canviat res més des de la validació, però
--- casos límit (dos creuaments el mateix dia, escut gastat en un dia
--- anterior) es resolen amb la millor aproximació, mai deixant saldo de
--- monedes ni dies_seguits negatius.
+-- completion real. Les MONEDES es reverteixen sempre (floor(punts/10), com
+-- les dona processar_punts_validats a totes les completions, no només la
+-- que creua el llindar). La RATXA, en canvi, només si aquesta completion
+-- era la que feia creuar el llindar diari — es recalcula amb l'estat
+-- actual (encara inclou aquesta completion), excloent-hi sempre les
+-- completions de "Bonus de ratxa" (no són feina real feta, no han de
+-- comptar ni per decidir el creuament ni per revertir-lo). Aproximació de
+-- fase 3 (veure CLAUDE.md "Validació de tasques"): dins la finestra de 15
+-- minuts és raonable assumir que no ha canviat res més des de la
+-- validació, però casos límit (dos creuaments el mateix dia, escut gastat
+-- en un dia anterior) es resolen amb la millor aproximació, mai deixant
+-- saldo de monedes ni dies_seguits negatius.
 create or replace function public.anullar_completion(p_completion_id uuid)
 returns table (foto_url text, thumb_url text)
 language plpgsql
@@ -1262,6 +1269,19 @@ begin
 
     v_dia_local := (v_completion.created_at at time zone 'Europe/Madrid')::date;
 
+    select coalesce(sum(part.punts_assignats), 0) into v_punts_completion
+    from public.participacions part
+    where part.completion_id = p_completion_id and part.usuari_id = v_usuari_id;
+
+    -- Monedes: exactament les que va donar aquesta completion, sempre
+    -- (processar_punts_validats ja no les lliga al llindar diari).
+    v_monedes_a_revertir := floor(v_punts_completion / 10.0)::integer;
+    if v_monedes_a_revertir > 0 then
+      update public.monedes
+      set saldo = greatest(saldo - v_monedes_a_revertir, 0)
+      where usuari_id = v_usuari_id;
+    end if;
+
     select coalesce(sum(part.punts_assignats), 0) into v_punts_avui_total
     from public.participacions part
     join public.completions comp on comp.id = part.completion_id
@@ -1273,10 +1293,6 @@ begin
         select 1 from public.activitats act
         where act.id = comp.activitat_id and act.nom = 'Bonus de ratxa'
       );
-
-    select coalesce(sum(part.punts_assignats), 0) into v_punts_completion
-    from public.participacions part
-    where part.completion_id = p_completion_id and part.usuari_id = v_usuari_id;
 
     select coalesce(sum(part.punts_assignats), 0) into v_punts_avui_sense
     from public.participacions part
@@ -1294,41 +1310,32 @@ begin
     v_punts_avui_abans := v_punts_avui_total - v_punts_completion;
     v_era_creuament := v_punts_avui_abans < v_llindar and v_punts_avui_total >= v_llindar;
 
-    if v_era_creuament then
-      -- Monedes: exactament les que va donar aquesta completion.
-      v_monedes_a_revertir := floor(v_punts_completion / 10.0)::integer;
-      if v_monedes_a_revertir > 0 then
-        update public.monedes
-        set saldo = greatest(saldo - v_monedes_a_revertir, 0)
-        where usuari_id = v_usuari_id;
-      end if;
+    -- Ratxa: només si aquesta completion era la que feia creuar el llindar
+    -- I sense ella el dia ja no arriba (si hi arribava igualment per unes
+    -- altres, no la toquem).
+    if v_era_creuament and v_punts_avui_sense < v_llindar then
+      select * into v_ratxa from public.ratxes where usuari_id = v_usuari_id for update;
 
-      -- Ratxa: només si sense aquesta completion el dia ja no arriba al
-      -- llindar (si hi arribava igualment per unes altres, no la toquem).
-      if v_punts_avui_sense < v_llindar then
-        select * into v_ratxa from public.ratxes where usuari_id = v_usuari_id for update;
+      if v_ratxa.ultim_dia_complert = v_dia_local then
+        if v_ratxa.dies_seguits <= 1 then
+          update public.ratxes
+          set dies_seguits = 0,
+              ultim_dia_complert = null
+          where usuari_id = v_usuari_id;
+        else
+          update public.ratxes
+          set dies_seguits = dies_seguits - 1,
+              ultim_dia_complert = v_dia_local - 1
+          where usuari_id = v_usuari_id;
+        end if;
 
-        if v_ratxa.ultim_dia_complert = v_dia_local then
-          if v_ratxa.dies_seguits <= 1 then
-            update public.ratxes
-            set dies_seguits = 0,
-                ultim_dia_complert = null
-            where usuari_id = v_usuari_id;
-          else
-            update public.ratxes
-            set dies_seguits = dies_seguits - 1,
-                ultim_dia_complert = v_dia_local - 1
-            where usuari_id = v_usuari_id;
-          end if;
-
-          -- Si l'escut es va gastar precisament aquest dia, torna'l a
-          -- deixar disponible.
-          if v_ratxa.escut_usat_mes = v_dia_local then
-            update public.ratxes
-            set escut_disponible = true,
-                escut_usat_mes = null
-            where usuari_id = v_usuari_id;
-          end if;
+        -- Si l'escut es va gastar precisament aquest dia, torna'l a
+        -- deixar disponible.
+        if v_ratxa.escut_usat_mes = v_dia_local then
+          update public.ratxes
+          set escut_disponible = true,
+              escut_usat_mes = null
+          where usuari_id = v_usuari_id;
         end if;
       end if;
     end if;

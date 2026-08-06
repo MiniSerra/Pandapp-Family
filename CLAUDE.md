@@ -111,13 +111,21 @@ tasques compartides, fase 3). El resultat es guarda a
 **Implementat a fase 3:** tot dins de `processar_punts_validats` (mai al
 client). De moment només el dia de gràcia automàtic al mes; comprar-ne un amb
 monedes no està fet. `ultim_dia_complert`/`escut_usat_mes` són dates locals
-d'Europe/Madrid, no instants — una ratxa és per dies de calendari.
+d'Europe/Madrid, no instants — una ratxa és per dies de calendari. **Només
+avança quan la completion fa arribar la suma de punts validats d'avui al
+llindar diari per primera vegada** — un cop al dia, no a cada reclamació
+(a diferència de les monedes, veure "Dues monedes").
 
 ### Dues monedes
 
 - **Punts de rànquing:** no es gasten mai. Són la puntuació de la temporada.
 - **Monedes:** es guanyen alhora que els punts i **es gasten** en recompenses reals
   pactades a casa (lliurar-se d'un torn, triar el sopar, triar la pel·lícula...).
+  **1 moneda per cada 10 punts de CADA completion validada, sempre** —
+  a diferència de la ratxa, no depenen d'arribar al llindar diari.
+  (Corregit a fase 3: fins llavors `processar_punts_validats` només donava
+  monedes quan la completion feia creuar el llindar, deixant sense moneda
+  la majoria de reclamacions normals del dia — bug real, no disseny.)
 
 Sense la segona moneda l'app és només una taula de rècords i s'esgota.
 
@@ -332,14 +340,16 @@ no s'acumula amb la prima de grup: s'aplica el més alt dels dos.
   dins dels primers 15 minuts. Retorna `foto_url`/`thumb_url` perquè el client
   esborri els fitxers del bucket. Si la completion ja estava `'validada'`,
   també reverteix les monedes i la ratxa que hagués donat
-  `processar_punts_validats`: resta les monedes d'aquesta completion concreta
-  si va ser ella qui va fer creuar el llindar diari, i decrementa
-  `dies_seguits` (mai per sota de 0) només si sense ella el dia ja no arriba
-  al llindar. Es recalcula amb l'estat actual assumint que no ha canviat res
-  més des de la validació (raonable dins de 15 minuts); casos límit (dos
-  creuaments el mateix dia, escut gastat en un dia anterior) queden resolts
-  amb una aproximació, mai amb saldo o `dies_seguits` negatius — és
-  intencionadament una aproximació de fase 3, no un recàlcul exacte. Les
+  `processar_punts_validats`: **resta sempre** les monedes d'aquesta
+  completion concreta (1 per cada 10 punts, com les dona sempre — veure
+  "Dues monedes"), i decrementa `dies_seguits` (mai per sota de 0) només
+  si a més va ser ella qui va fer creuar el llindar diari i sense ella el
+  dia ja no arriba. Es recalcula amb l'estat actual assumint que no ha
+  canviat res més des de la validació (raonable dins de 15 minuts); casos
+  límit de la ratxa (dos creuaments el mateix dia, escut gastat en un dia
+  anterior) queden resolts amb una aproximació, mai amb saldo o
+  `dies_seguits` negatius — és intencionadament una aproximació de fase 3,
+  no un recàlcul exacte. Les
   completions de "Bonus de ratxa" (veure "Ratxes") mai reverteixen res en
   esborrar-se — no són una reclamació real, mai poden ser "les que creuen
   el llindar" — i la papereta no s'hi mostra a la interfície.
